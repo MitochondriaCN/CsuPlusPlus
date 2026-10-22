@@ -1,3 +1,6 @@
+using CsuPlusPlus.Infra;
+using Microsoft.EntityFrameworkCore;
+
 namespace CsuPlusPlus;
 
 public class Program
@@ -7,6 +10,14 @@ public class Program
         var builder = WebApplication.CreateBuilder(args);
 
         // Add services to the container.
+
+        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("缺少连接字符串 ConnectionStrings:DefaultConnection。");
+
+        if (builder.Environment.IsDevelopment())
+            builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
+        else
+            builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
         builder.Services.AddControllers();
         // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
