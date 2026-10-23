@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 concurrency:
   group: deploy-production
@@ -59,25 +60,42 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Set image name
+        id: image
+        shell: bash
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: CsuPlusPlus/Dockerfile
           platforms: ${{ env.DOCKER_PLATFORM }}
-          tags: csuplusplus:${{ github.sha }}
-          outputs: type=docker,dest=${{ runner.temp }}/csuplusplus.tar
+          push: true
+          tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Upload and deploy
+      - name: Deploy from GHCR
         shell: bash
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
           remote_dir="/opt/csuplusplus/releases/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           ssh deploy-target "mkdir -p '$remote_dir'"
-          scp "$RUNNER_TEMP/csuplusplus.tar" scripts/deploy.sh "deploy-target:$remote_dir/"
-          ssh deploy-target "bash '$remote_dir/deploy.sh' '$GITHUB_SHA' '$remote_dir/csuplusplus.tar'"
+          scp scripts/deploy.sh "deploy-target:$remote_dir/"
+          ssh deploy-target "bash '$remote_dir/deploy.sh' '$IMAGE_REF'"
 
       - name: Clean up
         if: always()

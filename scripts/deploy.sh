@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="${1:?Usage: deploy.sh COMMIT_SHA IMAGE_ARCHIVE}"
-archive="${2:?Usage: deploy.sh COMMIT_SHA IMAGE_ARCHIVE}"
-image="csuplusplus:$version"
+image="${1:?Usage: deploy.sh IMAGE_REFERENCE}"
 name=csuplusplus
 previous=csuplusplus-previous
 env_file=/opt/csuplusplus/app.env
 
 test -s "$env_file"
-docker load --input "$archive"
+# 拉取成功后才停止旧容器；已有镜像层会由 Docker 复用。
+docker pull "$image"
 
 # 保留旧容器，若新版本启动失败则恢复；数据库迁移不随容器回滚。
 if docker container inspect "$previous" >/dev/null 2>&1; then

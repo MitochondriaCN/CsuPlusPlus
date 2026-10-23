@@ -147,7 +147,7 @@ JWT 的 Issuer、Audience 和有效期已有公共配置；可以通过 `Jwt__Is
 
 ## GitHub Actions 自动 Docker 部署
 
-`.github/workflows/deploy.yml` 仅在推送到 `main` 时触发：构建镜像 → 通过 SSH 上传 → 加载镜像 → 更新 `csuplusplus` 容器。无需配置镜像仓库。部署串行执行，不中断正在进行的部署；GitHub 同一并发组只保留一个等待任务，密集推送时可能跳过中间版本。
+`.github/workflows/deploy.yml` 仅在推送到 `main` 时触发：构建镜像 → 推送 GitHub Container Registry（GHCR）→ SSH 通知服务器拉取镜像 → 更新 `csuplusplus` 容器。SSH 只上传部署脚本，Docker 会复用服务器已有的镜像层。部署串行执行，不中断正在进行的部署；GitHub 同一并发组只保留一个等待任务，密集推送时可能跳过中间版本。
 
 ### 1. 初始化服务器
 
@@ -188,7 +188,31 @@ Jwt__Secret=替换为至少32字节的随机密钥
 默认镜像架构为 `linux/amd64`；服务器为 ARM64 时，在同一页面的
 **Variables** 中添加 `DOCKER_PLATFORM=linux/arm64`。
 
-### 3. 推送 main
+### 3. 配置 GHCR 拉取权限
+
+镜像地址自动使用小写仓库名，本仓库对应：
+
+```text
+ghcr.io/mitochondriacn/csuplusplus:<commit-sha>
+```
+
+Actions 使用自动提供的 `GITHUB_TOKEN` 和工作流声明的 `packages: write` 权限推送，无需额外填写推送凭证。若组织策略限制发布包，需允许该仓库工作流写入 Packages；如果同名包已存在，则在包的
+**Manage Actions access** 中给本仓库写权限。
+
+GHCR 新包默认是私有的。在首次推送前，使用有该包访问权限的 GitHub 账号创建带 `read:packages` 权限的 Personal access token（classic），并在服务器上以
+**`DEPLOY_USER` 对应用户**执行一次登录：
+
+```bash
+read -rsp 'GHCR token: ' GHCR_TOKEN; printf '\n'
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username 你的GitHub用户名 --password-stdin
+unset GHCR_TOKEN
+```
+
+凭证保存在该用户的 Docker 配置中，后续部署会复用。不要用 `sudo docker login`，否则凭证会保存给 root。令牌到期后需重新登录；如果组织要求 SSO，还需授权该令牌。服务器必须能访问 `ghcr.io` 及其镜像下载服务。
+
+也可以在首次镜像推送后，将 GitHub Packages 中该包的可见性设为 Public，公开镜像允许匿名拉取。若首次部署因未登录而失败，配置权限后，在 Actions 中重新运行失败任务即可。
+
+### 4. 推送 main
 
 提交配置并推送到 `main` 后，在 GitHub **Actions → Deploy
 main** 查看进度。现有 Dockerfile 的 Release 构建在镜像构建过程中执行。
@@ -204,7 +228,7 @@ docker ps --filter name=csuplusplus
 docker logs --tail 100 csuplusplus
 ```
 
-每次镜像以 commit SHA 标记并保留在服务器，上传的 tar 包部署后自动清理；旧镜像可按磁盘使用情况手动清理。
+每次镜像以 commit SHA 标记并推送到 GHCR；部署按构建输出的 digest（`sha256:…`）拉取，确保运行的就是本次构建。拉取失败时旧容器继续运行。首次拉取需要下载全部镜像层，后续仅下载缺少的层；实际速度取决于服务器到 GHCR 的网络。上传的部署脚本执行后自动清理，旧镜像可按磁盘使用情况手动清理。
 
 ## 当前接口
 
