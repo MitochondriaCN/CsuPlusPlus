@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using CsuPlusPlus.Dtos.Auth;
-using CsuPlusPlus.Services.Auth;
 using CsuPlusPlus.Services.UserProfile;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +8,7 @@ namespace CsuPlusPlus.Controllers;
 
 [ApiController]
 [Route("profile")]
-public class UserProfileController(IAuthService authService, IUserProfileService userProfileService) : ControllerBase
+public class UserProfileController(IUserProfileService userProfileService) : ControllerBase
 {
     [Authorize]
     [HttpGet("me")]
