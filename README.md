@@ -145,6 +145,67 @@ JWT 的 Issuer、Audience 和有效期已有公共配置；可以通过 `Jwt__Is
 
 仅修改实体、重新发布而不生成迁移，不会让生产数据库结构自动变化。
 
+## GitHub Actions 自动 Docker 部署
+
+`.github/workflows/deploy.yml` 仅在推送到 `main` 时触发：构建镜像 → 通过 SSH 上传 → 加载镜像 → 更新 `csuplusplus` 容器。无需配置镜像仓库。部署串行执行，不中断正在进行的部署；GitHub 同一并发组只保留一个等待任务，密集推送时可能跳过中间版本。
+
+### 1. 初始化服务器
+
+目标为 Linux 服务器，已安装并启动 Docker，同时需要 Bash 和 `timeout`（常见 Linux 发行版自带）。SSH 部署用户需要能直接执行 `docker`，并有 `/opt/csuplusplus` 目录的写权限。
+
+在服务器上执行（将 `deployuser` 换成实际 SSH 用户）：
+
+```bash
+sudo mkdir -p /opt/csuplusplus
+sudo chown deployuser:deployuser /opt/csuplusplus
+```
+
+创建 `/opt/csuplusplus/app.env`，填写真实配置，不要提交到 Git：
+
+```dotenv
+ConnectionStrings__DefaultConnection=Host=host.docker.internal;Port=5432;Database=csuplusplus;Username=appuser;Password=替换为实际密码
+Jwt__Secret=替换为至少32字节的随机密钥
+```
+
+这是 Docker 的 env 文件，值不加 shell 引号。创建后执行 `chmod 600 /opt/csuplusplus/app.env`。
+
+示例数据库位于 Docker 宿主机；数据库在其他服务器时替换 `Host`。容器中的 `localhost` 指向容器自身。宿主机 PostgreSQL 需要监听容器可访问的地址，并通过 `pg_hba.conf` 允许该容器网络的连接。此流程不创建 PostgreSQL，应用启动时会自动执行迁移。
+
+### 2. 填写 GitHub Secrets
+
+在仓库 **Settings → Secrets and variables → Actions → Secrets** 中添加：
+
+| Secret               | 内容                                                                                            |
+|----------------------|-------------------------------------------------------------------------------------------------|
+| `DEPLOY_HOST`        | 服务器 IP 或域名                                                                                |
+| `DEPLOY_USER`        | SSH 用户名                                                                                      |
+| `DEPLOY_PORT`        | SSH 端口，未设置时为 `22`                                                                       |
+| `DEPLOY_SSH_KEY`     | 完整 SSH 私钥，配套公钥添加到服务器用户的 `~/.ssh/authorized_keys`；使用无口令的部署专用密钥    |
+| `DEPLOY_KNOWN_HOSTS` | 已核实指纹的服务器 SSH 公钥记录，格式与 `~/.ssh/known_hosts` 相同；非标准端口对应 `[主机]:端口` |
+
+仓库不包含 SSH 信息或私钥，填写 Secrets 后生效。
+
+默认镜像架构为 `linux/amd64`；服务器为 ARM64 时，在同一页面的
+**Variables** 中添加 `DOCKER_PLATFORM=linux/arm64`。
+
+### 3. 推送 main
+
+提交配置并推送到 `main` 后，在 GitHub **Actions → Deploy
+main** 查看进度。现有 Dockerfile 的 Release 构建在镜像构建过程中执行。
+
+应用以 Production 环境运行，映射服务器 `8080` 端口到容器 `8080` 端口。可通过 `http://服务器地址:8080` 访问（需允许该端口），生产 HTTPS 可接现有反向代理，并按上文配置转发头。若希望只允许同机代理访问，将 `scripts/deploy.sh` 的 `--publish 8080:8080` 改为 `--publish 127.0.0.1:8080:8080`。
+
+部署会短暂停止旧容器，等待新容器 `/health/check` 返回预期的 `200` 后才判定成功。若超时或启动失败，输出容器日志并尝试恢复旧容器。若调整该接口路由或 HTTPS 重定向配置，需要同步调整探测逻辑。数据库迁移不会自动回滚，迁移需保持兼容并做好备份。
+
+排查服务器运行情况：
+
+```bash
+docker ps --filter name=csuplusplus
+docker logs --tail 100 csuplusplus
+```
+
+每次镜像以 commit SHA 标记并保留在服务器，上传的 tar 包部署后自动清理；旧镜像可按磁盘使用情况手动清理。
+
 ## 当前接口
 
 | 方法 | 路径             | 说明                                                    |

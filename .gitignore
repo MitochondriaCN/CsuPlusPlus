@@ -1,5 +1,69 @@
-bin/
-obj/
+# .NET build and publish output
+[Bb]in/
+[Oo]bj/
 /packages/
-riderModule.iml
-/_ReSharper.Caches/
+/publish/
+/artifacts/
+*.nupkg
+*.snupkg
+
+# IDE settings and user-specific files
+.idea/
+.vs/
+*.iml
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.sln.DotSettings.user
+_ReSharper.Caches/
+_ReSharper*/
+*.sln.iml
+
+# Local SQLite databases and journal files
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+*.sqlite3-journal
+
+# Local environment files (keep configuration templates)
+.env
+.env.*
+*.env
+!.env.example
+!.env.sample
+!*.env.example
+!*.env.sample
+appsettings.Local.json
+appsettings.*.Local.json
+
+# Test results and coverage reports
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+coverage.cobertura.xml
+coverage.opencover.xml
+
+# Logs and temporary files
+logs/
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini

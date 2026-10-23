@@ -1,0 +1,89 @@
+name: Deploy main
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DOCKER_PLATFORM: ${{ vars.DOCKER_PLATFORM || 'linux/amd64' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host deploy-target
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            Port $DEPLOY_PORT
+            IdentityFile ~/.ssh/id_ed25519
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 30
+            ServerAliveCountMax 6
+          EOF
+          chmod 600 ~/.ssh/config
+          ssh deploy-target 'test -s /opt/csuplusplus/app.env && docker info >/dev/null'
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: CsuPlusPlus/Dockerfile
+          platforms: ${{ env.DOCKER_PLATFORM }}
+          tags: csuplusplus:${{ github.sha }}
+          outputs: type=docker,dest=${{ runner.temp }}/csuplusplus.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Upload and deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_dir="/opt/csuplusplus/releases/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh deploy-target "mkdir -p '$remote_dir'"
+          scp "$RUNNER_TEMP/csuplusplus.tar" scripts/deploy.sh "deploy-target:$remote_dir/"
+          ssh deploy-target "bash '$remote_dir/deploy.sh' '$GITHUB_SHA' '$remote_dir/csuplusplus.tar'"
+
+      - name: Clean up
+        if: always()
+        shell: bash
+        run: |
+          if [ -s ~/.ssh/config ]; then
+            ssh deploy-target "rm -rf '/opt/csuplusplus/releases/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}'" || true
+          fi
+          rm -f ~/.ssh/id_ed25519

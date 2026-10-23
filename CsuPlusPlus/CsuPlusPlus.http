@@ -1,6 +1,19 @@
-@CsuPlusPlus_HostAddress = http://localhost:5253
+@host = http://localhost:5253
 
-GET {{CsuPlusPlus_HostAddress}}/weatherforecast/
-Accept: application/json
+### 登录
+POST {{host}}/auth/login
+Content-Type: application/json
 
-###
+{
+  "email": "test@example.com",
+  "password": "your-password"
+}
+
+### 测试错误密码
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "wrong-password"
+}
