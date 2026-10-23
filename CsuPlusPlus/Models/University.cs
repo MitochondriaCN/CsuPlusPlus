@@ -7,6 +7,8 @@ namespace CsuPlusPlus.Models;
 public class University
 {
     public long Id { get; set; }
-    
+
     public required NonEmptyName Name { get; set; }
+
+    public File? Emblem { get; set; }
 }
