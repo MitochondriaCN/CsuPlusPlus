@@ -8,7 +8,26 @@ env_file=/opt/csuplusplus/app.env
 
 test -s "$env_file"
 # 拉取成功后才停止旧容器；已有镜像层会由 Docker 复用。
-docker pull "$image"
+# 为网络卡住设置单次超时，并采用指数退避重试。
+pull_attempts=5
+pull_timeout=180
+retry_delay=10
+for ((attempt = 1; attempt <= pull_attempts; attempt++)); do
+  echo "Pulling $image (attempt $attempt/$pull_attempts, timeout ${pull_timeout}s)"
+  if timeout --kill-after=10s "${pull_timeout}s" docker pull "$image"; then
+    break
+  else
+    pull_status=$?
+    echo "Image pull failed (exit $pull_status)." >&2
+  fi
+  if [ "$attempt" -eq "$pull_attempts" ]; then
+    echo 'Image pull failed after all attempts; existing container was not changed.' >&2
+    exit 1
+  fi
+  echo "Retrying in ${retry_delay}s..."
+  sleep "$retry_delay"
+  retry_delay=$((retry_delay * 2))
+done
 
 # 保留旧容器，若新版本启动失败则恢复；数据库迁移不随容器回滚。
 if docker container inspect "$previous" >/dev/null 2>&1; then
