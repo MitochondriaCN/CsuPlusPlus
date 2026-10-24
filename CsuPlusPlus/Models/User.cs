@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace CsuPlusPlus.Models;
 
 [Table("users")]
-[Index(nameof(MailAddress.Value), IsUnique = true)]
+[Index("MailAddress.Value", IsUnique = true)]
 public class User
 {
     public long Id { get; set; }
