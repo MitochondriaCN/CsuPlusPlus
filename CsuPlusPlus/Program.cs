@@ -1,4 +1,5 @@
 using System.Text;
+using CsuPlusPlus.Authorization;
 using CsuPlusPlus.Infra;
 using CsuPlusPlus.Models;
 using CsuPlusPlus.Options;
@@ -7,6 +8,7 @@ using CsuPlusPlus.Services.UserProfile;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 
@@ -65,6 +67,9 @@ public class Program
                     ValidateAudience = true,
                     ValidAudience = jwt.Audience,
 
+                    RoleClaimType = "role",
+                    NameClaimType = JwtRegisteredClaimNames.Sub,
+
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(
                         Encoding.UTF8.GetBytes(jwt.Secret)),
@@ -77,7 +82,11 @@ public class Program
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
             });
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy(Policies.ManageUniversity, policy =>
+                policy.RequireRole(nameof(UserRole.Admin)));
+        });
 
         // Controllers
         builder.Services.AddControllers();
