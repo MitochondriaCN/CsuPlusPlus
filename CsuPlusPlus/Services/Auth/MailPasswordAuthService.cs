@@ -48,7 +48,8 @@ public class MailPasswordAuthService(
             College = college,
             MailAddress = mailAddress,
             Nickname = nickname,
-            PasswordHash = string.Empty
+            PasswordHash = string.Empty,
+            Role = UserRole.User
         };
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
 
@@ -99,7 +100,8 @@ public class MailPasswordAuthService(
             Subject = new ClaimsIdentity([
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString(CultureInfo.InvariantCulture)),
                 new Claim(JwtRegisteredClaimNames.Email, user.MailAddress.Value),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N"))
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
+                new Claim("role", user.Role.ToString())
             ])
         });
 

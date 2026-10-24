@@ -17,4 +17,13 @@ public class User
     public required Nickname Nickname { get; set; }
 
     public required string PasswordHash { get; set; }
+
+    public required UserRole Role { get; set; } = UserRole.User;
+}
+
+public enum UserRole
+{
+    User = 0,
+    Moderator = 10,
+    Admin = 20
 }
