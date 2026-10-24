@@ -1,9 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using CsuPlusPlus.Models.ValueObjects;
+using Microsoft.EntityFrameworkCore;
 
 namespace CsuPlusPlus.Models;
 
 [Table("users")]
+[Index(nameof(MailAddress.Value), IsUnique = true)]
 public class User
 {
     public long Id { get; set; }
