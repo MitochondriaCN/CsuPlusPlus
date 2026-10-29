@@ -109,11 +109,9 @@ public class Program
 
         // Middlewares
 
+        app.MapOpenApi();
         if (app.Environment.IsDevelopment())
-        {
-            app.MapOpenApi();
             app.MapScalarApiReference();
-        }
 
         app.UseHttpsRedirection();
 
