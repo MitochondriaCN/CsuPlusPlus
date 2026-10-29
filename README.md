@@ -17,7 +17,7 @@ dotnet restore
 dotnet run --project CsuPlusPlus --launch-profile http
 ```
 
-默认监听 `http://localhost:5253`。开发环境可访问 `/openapi/v1.json` 获取 OpenAPI 文档。
+默认监听 `http://localhost:5253`。可访问 `/openapi/v1.json` 获取现有 OpenAPI 文档，或访问 `/openapi/v1-3.1.json` 获取 OpenAPI 3.1 文档。
 
 数据库和 JWT 配置分别从 `appsettings.json`、`appsettings.Development.json` 加载。开发连接字符串为 `Data Source=csuplusplus.db`；SQLite 文件路径相对于进程工作目录，使用上述启动方式时通常位于项目目录内。
 
