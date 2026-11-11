@@ -105,7 +105,13 @@ public class MailPasswordAuthService(
             ])
         });
 
-        return new LoginResponse(token, expiresAt, UserProfileDto.From(user));
+        return new LoginResponse(token,
+            expiresAt,
+            new UserProfileDto(user.Id,
+                user.MailAddress.Value,
+                user.Nickname.Value,
+                user.College.Id,
+                user.College.Name.Value));
     }
 
     private SigningCredentials GetSigningCredentials()

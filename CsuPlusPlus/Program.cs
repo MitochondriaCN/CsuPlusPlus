@@ -4,6 +4,7 @@ using CsuPlusPlus.Infra;
 using CsuPlusPlus.Models;
 using CsuPlusPlus.Options;
 using CsuPlusPlus.Services.Auth;
+using CsuPlusPlus.Services.College;
 using CsuPlusPlus.Services.University;
 using CsuPlusPlus.Services.UserProfile;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -11,6 +12,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 
 namespace CsuPlusPlus;
@@ -40,6 +42,7 @@ public class Program
         builder.Services.AddScoped<IAuthService, MailPasswordAuthService>();
         builder.Services.AddScoped<IUserProfileService, UserProfileService>();
         builder.Services.AddScoped<IUniversityService, UniversityService>();
+        builder.Services.AddScoped<ICollegeService, CollegeService>();
 
         // JWT
         var jwt = builder.Configuration
@@ -94,6 +97,11 @@ public class Program
         builder.Services.AddControllers();
         // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
         builder.Services.AddOpenApi();
+        builder.Services.AddOpenApi("v1-3.1", options =>
+        {
+            options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_1;
+            options.ShouldInclude = description => description.GroupName is null or "v1";
+        });
 
         var app = builder.Build();
 
