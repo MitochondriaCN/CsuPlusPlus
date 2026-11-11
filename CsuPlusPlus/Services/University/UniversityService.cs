@@ -24,6 +24,6 @@ public class UniversityService(AppDbContext db) : IUniversityService
         await db.SaveChangesAsync(cancellationToken);
 
         return new CreateUniversityResult(CreateUniversityStatus.Success,
-            new UniversityResponse(university.Name.Value, university.Emblem?.GuidFilename.ToString()));
+            new UniversityResponse(university.Id, university.Name.Value, university.Emblem?.GuidFilename.ToString()));
     }
 }

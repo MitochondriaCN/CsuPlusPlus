@@ -4,6 +4,7 @@ using CsuPlusPlus.Infra;
 using CsuPlusPlus.Models;
 using CsuPlusPlus.Options;
 using CsuPlusPlus.Services.Auth;
+using CsuPlusPlus.Services.College;
 using CsuPlusPlus.Services.University;
 using CsuPlusPlus.Services.UserProfile;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -41,6 +42,7 @@ public class Program
         builder.Services.AddScoped<IAuthService, MailPasswordAuthService>();
         builder.Services.AddScoped<IUserProfileService, UserProfileService>();
         builder.Services.AddScoped<IUniversityService, UniversityService>();
+        builder.Services.AddScoped<ICollegeService, CollegeService>();
 
         // JWT
         var jwt = builder.Configuration
