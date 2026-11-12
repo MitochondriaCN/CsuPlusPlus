@@ -1,4 +1,5 @@
 using CsuPlusPlus.Authorization;
+using CsuPlusPlus.Dtos.Common;
 using CsuPlusPlus.Dtos.University;
 using CsuPlusPlus.Services.University;
 using Microsoft.AspNetCore.Authorization;
@@ -25,5 +26,13 @@ public class UniversityController(IUniversityService universityService) : Contro
                 title: "大学名称已存在。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
+    }
+
+    [HttpGet("list")]
+    public async Task<ActionResult<PagedResponse<UniversityResponse>>> List
+        ([FromQuery] PageRequest request, CancellationToken cancellationToken)
+    {
+        var result = await universityService.ListUniversitiesAsync(request, cancellationToken);
+        return Ok(result);
     }
 }
