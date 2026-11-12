@@ -1,5 +1,6 @@
 using CsuPlusPlus.Authorization;
 using CsuPlusPlus.Dtos.College;
+using CsuPlusPlus.Dtos.Common;
 using CsuPlusPlus.Services.College;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,5 +29,15 @@ public class CollegeController(ICollegeService collegeService) : ControllerBase
                 title: "该大学下学院名称已存在。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
+    }
+
+    [HttpGet("list")]
+    public async Task<ActionResult<PagedResponse<CollegeResponse>>> List(
+        [FromQuery] long universityId,
+        [FromQuery] PageRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await collegeService.ListCollegesAsync(universityId, request, cancellationToken);
+        return Ok(result);
     }
 }
