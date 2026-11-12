@@ -12,6 +12,7 @@ public record Setting
     /// <summary>
     /// JSON 配置值
     /// </summary>
+    [Column(TypeName = "jsonb")]
     public required string Value { get; set; }
 
     public required DateTimeOffset UpdatedAt { get; set; }

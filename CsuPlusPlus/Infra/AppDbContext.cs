@@ -16,10 +16,4 @@ public class AppDbContext : DbContext
     public DbSet<University> Universities { get; set; }
     public DbSet<User> Users { get; set; }
     public DbSet<Setting> Settings { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<Setting>().HasKey(s => s.Key);
-        modelBuilder.Entity<Setting>().Property(s => s.Value).HasColumnType("jsonb");
-    }
 }
