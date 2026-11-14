@@ -51,9 +51,10 @@ public class FileService(
             await settingsService.GetAsync(SettingsKey.UserFile, UserFileSettings.Default, cancellationToken);
 
         // 查用户今天上传多少文件
+        var startOfToday = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
         var todayUploadCount = await db.Files.AsNoTracking()
             .Where(f => f.Uploader.Id == uploaderUserId
-                        && f.CreatedAt >= DateTimeOffset.UtcNow.Date)
+                        && f.CreatedAt >= startOfToday)
             .CountAsync(cancellationToken);
         var maxUploadCount = settings.MaxUploadsOfDay;
 
