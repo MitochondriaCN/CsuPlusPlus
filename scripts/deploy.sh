@@ -58,6 +58,8 @@ docker run -d \
   --env-file "$env_file" \
   --env ASPNETCORE_ENVIRONMENT=Production \
   --env ASPNETCORE_HTTP_PORTS=8080 \
+  --env FileStorage__RootPath=/data/files \
+  --volume csuplusplus-files:/data/files \
   --publish 8080:8080 \
   --add-host host.docker.internal:host-gateway \
   --log-opt max-size=10m \

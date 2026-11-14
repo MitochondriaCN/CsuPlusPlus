@@ -1,4 +1,5 @@
 ﻿FROM mcr.microsoft.com/dotnet/aspnet:11.0-preview AS base
+RUN mkdir -p /data/files && chown $APP_UID /data/files
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080

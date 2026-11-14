@@ -17,7 +17,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261024054526_AddUserRole";
+    public override string LastMigrationId => "20261114080610_AddFileUploadMetadata";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -114,19 +114,54 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.Property<long?>("CourseId")
                     .HasColumnType("bigint");
 
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("Extension")
+                    .IsRequired()
+                    .HasColumnType("text");
+
+                b.Property<string>("FriendlyFilename")
+                    .HasMaxLength(30)
+                    .HasColumnType("character varying(30)");
+
                 b.Property<Guid>("GuidFilename")
                     .HasColumnType("uuid");
 
-                b.Property<long>("UpdaterId")
+                b.Property<byte[]>("Sha256")
+                    .IsRequired()
+                    .HasColumnType("bytea");
+
+                b.Property<long>("UploaderId")
                     .HasColumnType("bigint");
 
                 b.HasKey("Id");
 
                 b.HasIndex("CourseId");
 
-                b.HasIndex("UpdaterId");
+                b.HasIndex("Sha256")
+                    .IsUnique();
+
+                b.HasIndex("UploaderId");
 
                 b.ToTable("files");
+            });
+
+        modelBuilder.Entity("CsuPlusPlus.Models.Setting", b =>
+            {
+                b.Property<string>("Key")
+                    .HasColumnType("text");
+
+                b.Property<DateTimeOffset>("UpdatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("Value")
+                    .IsRequired()
+                    .HasColumnType("jsonb");
+
+                b.HasKey("Key");
+
+                b.ToTable("settings");
             });
 
         modelBuilder.Entity("CsuPlusPlus.Models.University", b =>
@@ -239,15 +274,15 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .WithMany()
                     .HasForeignKey("CourseId");
 
-                b.HasOne("CsuPlusPlus.Models.User", "Updater")
+                b.HasOne("CsuPlusPlus.Models.User", "Uploader")
                     .WithMany()
-                    .HasForeignKey("UpdaterId")
+                    .HasForeignKey("UploaderId")
                     .OnDelete(DeleteBehavior.Cascade)
                     .IsRequired();
 
                 b.Navigation("Course");
 
-                b.Navigation("Updater");
+                b.Navigation("Uploader");
             });
 
         modelBuilder.Entity("CsuPlusPlus.Models.University", b =>

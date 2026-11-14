@@ -1,4 +1,5 @@
 using CsuPlusPlus.Dtos.College;
+using CsuPlusPlus.Dtos.Common;
 using CsuPlusPlus.Infra;
 using CsuPlusPlus.Models.ValueObjects;
 using Microsoft.EntityFrameworkCore;
@@ -31,5 +32,32 @@ public class CollegeService(AppDbContext db) : ICollegeService
 
         return new CreateCollegeResult(CreateCollegeStatus.Success,
             new CollegeResponse(college.Id, college.Name.Value, university.Id, university.Name.Value));
+    }
+
+    public async Task<PagedResponse<CollegeResponse>> ListCollegesAsync(
+        long universityId,
+        PageRequest request,
+        CancellationToken token)
+    {
+        var query = db.Colleges
+            .AsNoTracking()
+            .Where(c => c.University.Id == universityId)
+            .OrderBy(c => c.Id);
+        var totalCount = await query.LongCountAsync(token);
+        var items = await query
+            .Skip(request.Skip)
+            .Take(request.PageSize)
+            .Select(c => new CollegeResponse(
+                c.Id,
+                c.Name.Value,
+                c.University.Id,
+                c.University.Name.Value))
+            .ToListAsync(token);
+
+        return new PagedResponse<CollegeResponse>(
+            Items: items,
+            Page: request.Page,
+            PageSize: request.PageSize,
+            TotalCount: totalCount);
     }
 }

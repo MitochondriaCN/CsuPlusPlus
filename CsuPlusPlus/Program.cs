@@ -1,14 +1,19 @@
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using CsuPlusPlus.Authorization;
 using CsuPlusPlus.Infra;
 using CsuPlusPlus.Models;
 using CsuPlusPlus.Options;
 using CsuPlusPlus.Services.Auth;
 using CsuPlusPlus.Services.College;
+using CsuPlusPlus.Services.File;
+using CsuPlusPlus.Services.Setting;
 using CsuPlusPlus.Services.University;
 using CsuPlusPlus.Services.UserProfile;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -36,6 +41,8 @@ public class Program
 
         // Configure
         builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
+        builder.Services.Configure<FileStorageOptions>(
+            builder.Configuration.GetSection(FileStorageOptions.SectionName));
 
         // Services
         builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -43,6 +50,8 @@ public class Program
         builder.Services.AddScoped<IUserProfileService, UserProfileService>();
         builder.Services.AddScoped<IUniversityService, UniversityService>();
         builder.Services.AddScoped<ICollegeService, CollegeService>();
+        builder.Services.AddScoped<ISettingsService, JsonSettingsService>();
+        builder.Services.AddScoped<IFileService, FileService>();
 
         // JWT
         var jwt = builder.Configuration
@@ -87,14 +96,53 @@ public class Program
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
             });
+
+        // Policy
         builder.Services.AddAuthorization(options =>
         {
             options.AddPolicy(Policies.ManageUniversity, policy =>
+                policy.RequireRole(nameof(UserRole.Admin)));
+            options.AddPolicy(Policies.ManageSettings, policy =>
+                policy.RequireRole(nameof(UserRole.Admin)));
+            options.AddPolicy(Policies.UploadGlobalFile, policy =>
+                policy.RequireRole(nameof(UserRole.Admin)));
+            options.AddPolicy(Policies.DownloadGlobalFile, policy =>
                 policy.RequireRole(nameof(UserRole.Admin)));
         });
 
         // Controllers
         builder.Services.AddControllers();
+
+        // Rate limiting
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            options.AddPolicy(RateLimitPolicies.FileDownload, httpContext =>
+                RateLimitPartition.GetSlidingWindowLimiter(
+                    partitionKey: httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                                  ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                                  ?? "anonymous",
+                    factory: _ => new SlidingWindowRateLimiterOptions
+                    {
+                        PermitLimit = 5,
+                        Window = TimeSpan.FromMinutes(1),
+                        SegmentsPerWindow = 5,
+                        QueueLimit = 0
+                    }));
+
+            options.OnRejected = async (context, cancellationToken) =>
+            {
+                context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                context.HttpContext.Response.ContentType = "application/problem+json";
+                await context.HttpContext.Response.WriteAsJsonAsync(new ProblemDetails
+                {
+                    Status = StatusCodes.Status429TooManyRequests,
+                    Title = "请求过于频繁，请稍后重试。"
+                }, cancellationToken);
+            };
+        });
+
         // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
         builder.Services.AddOpenApi();
         builder.Services.AddOpenApi("v1-3.1", options =>
@@ -125,6 +173,7 @@ public class Program
 
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter();
 
         app.MapControllers();
 

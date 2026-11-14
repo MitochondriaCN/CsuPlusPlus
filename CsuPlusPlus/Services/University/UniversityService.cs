@@ -1,3 +1,4 @@
+using CsuPlusPlus.Dtos.Common;
 using CsuPlusPlus.Dtos.University;
 using CsuPlusPlus.Infra;
 using CsuPlusPlus.Models.ValueObjects;
@@ -25,5 +26,26 @@ public class UniversityService(AppDbContext db) : IUniversityService
 
         return new CreateUniversityResult(CreateUniversityStatus.Success,
             new UniversityResponse(university.Id, university.Name.Value, university.Emblem?.GuidFilename.ToString()));
+    }
+
+    public async Task<PagedResponse<UniversityResponse>> ListUniversitiesAsync
+        (PageRequest request, CancellationToken cancellationToken)
+    {
+        var query = db.Universities.AsNoTracking().OrderBy(u => u.Id);
+        var totalCount = await query.LongCountAsync(cancellationToken);
+        var items = await query
+            .Skip(request.Skip)
+            .Take(request.PageSize)
+            .Select(u => new UniversityResponse(
+                u.Id,
+                u.Name.Value,
+                u.Emblem == null ? null : u.Emblem.GuidFilename.ToString()))
+            .ToListAsync(cancellationToken);
+
+        return new PagedResponse<UniversityResponse>(
+            Items: items,
+            Page: request.Page,
+            PageSize: request.PageSize,
+            TotalCount: totalCount);
     }
 }
