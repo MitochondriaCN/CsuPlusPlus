@@ -5,6 +5,7 @@ using CsuPlusPlus.Models;
 using CsuPlusPlus.Options;
 using CsuPlusPlus.Services.Auth;
 using CsuPlusPlus.Services.College;
+using CsuPlusPlus.Services.File;
 using CsuPlusPlus.Services.Setting;
 using CsuPlusPlus.Services.University;
 using CsuPlusPlus.Services.UserProfile;
@@ -37,6 +38,8 @@ public class Program
 
         // Configure
         builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
+        builder.Services.Configure<FileStorageOptions>(
+            builder.Configuration.GetSection(FileStorageOptions.SectionName));
 
         // Services
         builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -45,6 +48,7 @@ public class Program
         builder.Services.AddScoped<IUniversityService, UniversityService>();
         builder.Services.AddScoped<ICollegeService, CollegeService>();
         builder.Services.AddScoped<ISettingsService, JsonSettingsService>();
+        builder.Services.AddScoped<IFileService, FileService>();
 
         // JWT
         var jwt = builder.Configuration
