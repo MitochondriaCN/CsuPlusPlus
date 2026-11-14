@@ -131,4 +131,40 @@ public class FileService(
         return new CreateFileResponse(CreateFileResult.Success,
             await GetFileMetadataAsync(file.Id, cancellationToken));
     }
+
+    public async Task<DownloadFileResponse> DownloadFileAsync(long id, CancellationToken cancellationToken)
+    {
+        var file = await db.Files.AsNoTracking()
+            .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
+        if (file == null)
+            return new DownloadFileResponse(DownloadFileResult.NotFound);
+
+        var path = Path.Combine(fileStorageOptions.Value.RootPath,
+            file.GuidFilename.ToString("N") + file.Extension);
+        if (!System.IO.File.Exists(path))
+            return new DownloadFileResponse(DownloadFileResult.ContentMissing);
+
+        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+            64 * 1024, useAsync: true);
+        var downloadName = string.IsNullOrWhiteSpace(file.FriendlyFilename)
+            ? file.GuidFilename.ToString("N")
+            : Path.GetFileName(file.FriendlyFilename);
+
+        return new DownloadFileResponse(
+            DownloadFileResult.Success,
+            Content: stream,
+            ContentType: GetContentType(file.Extension),
+            DownloadName: downloadName + file.Extension);
+    }
+
+    private static string GetContentType(string extension) =>
+        extension switch
+        {
+            ".pdf" => "application/pdf",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".zip" => "application/zip",
+            _ => "application/octet-stream"
+        };
 }

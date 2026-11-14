@@ -8,4 +8,6 @@ public interface IFileService
 
     Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
         CancellationToken cancellationToken);
+
+    Task<DownloadFileResponse> DownloadFileAsync(long id, CancellationToken cancellationToken);
 }
