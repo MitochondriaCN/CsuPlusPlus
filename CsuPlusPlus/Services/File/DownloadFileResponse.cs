@@ -11,5 +11,6 @@ public enum DownloadFileResult
 {
     Success,
     NotFound,
+    Forbidden,
     ContentMissing
 }

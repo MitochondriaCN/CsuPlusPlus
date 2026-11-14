@@ -96,11 +96,17 @@ public class Program
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
             });
+
+        // Policy
         builder.Services.AddAuthorization(options =>
         {
             options.AddPolicy(Policies.ManageUniversity, policy =>
                 policy.RequireRole(nameof(UserRole.Admin)));
             options.AddPolicy(Policies.ManageSettings, policy =>
+                policy.RequireRole(nameof(UserRole.Admin)));
+            options.AddPolicy(Policies.UploadGlobalFile, policy =>
+                policy.RequireRole(nameof(UserRole.Admin)));
+            options.AddPolicy(Policies.DownloadGlobalFile, policy =>
                 policy.RequireRole(nameof(UserRole.Admin)));
         });
 

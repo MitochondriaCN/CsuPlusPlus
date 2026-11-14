@@ -13,6 +13,7 @@ public enum CreateFileResult
     TooLarge,
     FormatNotSupported,
     CourseNotFound,
+    CourseInOtherUniversity,
     Duplicate,
     DailyUploadLimitExceeded,
     UserNotFound

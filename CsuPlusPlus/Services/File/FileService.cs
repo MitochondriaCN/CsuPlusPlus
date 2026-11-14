@@ -37,9 +37,11 @@ public class FileService(
     }
 
     public async Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
-        CancellationToken cancellationToken)
+        bool allowCrossUniversity, CancellationToken cancellationToken)
     {
         var user = await db.Users
+            .Include(u => u.College)
+            .ThenInclude(c => c.University)
             .Where(u => u.Id == uploaderUserId)
             .SingleOrDefaultAsync(cancellationToken);
         if (user == null)
@@ -76,11 +78,15 @@ public class FileService(
         if (request.CourseId != null)
         {
             var course = await db.Courses
+                .Include(c => c.University)
                 .Where(c => c.Id == request.CourseId)
                 .SingleOrDefaultAsync(cancellationToken);
 
             if (course == null)
                 return new CreateFileResponse(CreateFileResult.CourseNotFound, null);
+
+            if (!allowCrossUniversity && course.University.Id != user.College.University.Id)
+                return new CreateFileResponse(CreateFileResult.CourseInOtherUniversity, null);
 
             targetCourse = course;
         }
@@ -132,12 +138,26 @@ public class FileService(
             await GetFileMetadataAsync(file.Id, cancellationToken));
     }
 
-    public async Task<DownloadFileResponse> DownloadFileAsync(long id, CancellationToken cancellationToken)
+    public async Task<DownloadFileResponse> DownloadFileAsync(long id, long userId,
+        bool allowCrossUniversity, CancellationToken cancellationToken)
     {
         var file = await db.Files.AsNoTracking()
+            .Include(f => f.Course)
+            .ThenInclude(c => c!.University)
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
         if (file == null)
             return new DownloadFileResponse(DownloadFileResult.NotFound);
+
+        if (!allowCrossUniversity && file.Course != null)
+        {
+            var userUniversityId = await db.Users.AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => (long?)u.College.University.Id)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (userUniversityId == null || userUniversityId != file.Course?.University.Id)
+                return new DownloadFileResponse(DownloadFileResult.Forbidden);
+        }
 
         var path = Path.Combine(fileStorageOptions.Value.RootPath,
             file.GuidFilename.ToString("N") + file.Extension);
