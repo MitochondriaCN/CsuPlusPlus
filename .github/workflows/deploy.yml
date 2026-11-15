@@ -3,6 +3,8 @@ name: Deploy main
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'client/**'
 
 permissions:
   contents: read
