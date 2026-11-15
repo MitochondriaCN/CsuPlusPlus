@@ -17,11 +17,22 @@ dependencies:
   - $libs.koin.core
   - $libs.koin.compose
   - $libs.koin.compose.viewmodel
+  - $ktor.client.core
+  - $ktor.client.contentNegotiation
+  - $ktor.serialization.kotlinx.json
+  - $ktor.client.logging
+  - io.ktor:ktor-client-engine-defaults
 
 dependencies@android:
   - $compose.uiTooling
 
 settings:
+  kotlin:
+    serialization:
+      format: json
+      version: 1.11.0
+  ktor:
+    enabled: true
   compose:
     enabled: true
     resources:
