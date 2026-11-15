@@ -12,6 +12,11 @@ dependencies:
   - $compose.hotReload.runtimeApi
   - $libs.androidx.lifecycle.viewmodel.compose
   - $libs.androidx.lifecycle.runtime.compose
+  - $libs.material3.adaptive.navigation.suite
+  - $libs.icons.lucide.cmp
+  - $libs.koin.core
+  - $libs.koin.compose
+  - $libs.koin.compose.viewmodel
 
 dependencies@android:
   - $compose.uiTooling

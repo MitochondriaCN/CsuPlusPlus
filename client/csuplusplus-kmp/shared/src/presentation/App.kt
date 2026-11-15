@@ -1,0 +1,63 @@
+package ink.qingshuige.csuplusplus.presentation
+
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.tooling.preview.Preview
+import com.composables.icons.lucide.House
+import com.composables.icons.lucide.Lucide
+import ink.qingshuige.csuplusplus.di.appModule
+import ink.qingshuige.csuplusplus.presentation.page.home.HomePage
+import org.jetbrains.compose.reload.DevelopmentEntryPoint
+import org.koin.compose.KoinApplication
+import org.koin.dsl.koinConfiguration
+
+@Composable
+@Preview
+@DevelopmentEntryPoint
+fun App() {
+    KoinApplication(
+        configuration = koinConfiguration { modules(appModule) }
+    ) {
+        AppContent()
+    }
+}
+
+@Composable
+private fun AppContent() {
+    var currentDestination by rememberSaveable { mutableStateOf(NavigationDestinations.HOME) }
+
+    MaterialTheme {
+        NavigationSuiteScaffold(
+            navigationSuiteItems = {
+                NavigationDestinations.entries.forEach {
+                    item(
+                        selected = it == currentDestination,
+                        onClick = { currentDestination = it },
+                        icon = { Icon(it.icon, contentDescription = it.description) },
+                        label = { Text(it.label) }
+                    )
+                }
+            }
+        ) {
+            when (currentDestination) {
+                NavigationDestinations.HOME -> HomePage()
+            }
+        }
+    }
+}
+
+enum class NavigationDestinations(
+    val label: String,
+    val icon: ImageVector,
+    val description: String
+) {
+    HOME("首页", Lucide.House, "首页")
+}
