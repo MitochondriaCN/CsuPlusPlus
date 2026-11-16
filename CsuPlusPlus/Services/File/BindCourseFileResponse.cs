@@ -11,5 +11,7 @@ public enum BindCourseFileResult
     Success,
     FileNotFound,
     CourseNotFound,
-    Duplicate
+    CourseInOtherUniversity,
+    Duplicate,
+    UserNotFound
 }

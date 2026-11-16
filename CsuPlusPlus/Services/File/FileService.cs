@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
+using CsuPlusPlus.Dtos.Common;
+using CsuPlusPlus.Dtos.Course;
 using CsuPlusPlus.Dtos.File;
 using CsuPlusPlus.Infra;
+using CsuPlusPlus.Models;
 using CsuPlusPlus.Options;
 using CsuPlusPlus.Services.Setting;
 using CsuPlusPlus.Settings;
@@ -33,7 +36,7 @@ public class FileService(
     }
 
     public async Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
-        CancellationToken cancellationToken)
+        long? courseId, CancellationToken cancellationToken)
     {
         var user = await db.Users
             .Include(u => u.College)
@@ -82,6 +85,19 @@ public class FileService(
             return new CreateFileResponse(CreateFileResult.Duplicate,
                 await GetFileMetadataAsync(existingFile.Id, cancellationToken));
 
+        // 校验课程
+        Course? course = null;
+        if (courseId is not null)
+        {
+            course = await db.Courses
+                .Include(c => c.University)
+                .SingleOrDefaultAsync(c => c.Id == courseId, cancellationToken);
+            if (course == null)
+                return new CreateFileResponse(CreateFileResult.CourseNotFound, null);
+            if (course.University.Id != user.College.University.Id)
+                return new CreateFileResponse(CreateFileResult.CourseInOtherUniversity, null);
+        }
+
         // 落盘
         var guidFileName = Guid.NewGuid();
         Directory.CreateDirectory(fileStorageOptions.Value.RootPath);
@@ -101,6 +117,9 @@ public class FileService(
             Extension = extension
         };
         db.Files.Add(file);
+        if (course != null)
+            db.CourseFiles.Add(new CourseFile { Course = course, File = file });
+
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -108,8 +127,7 @@ public class FileService(
         catch (DbUpdateException)
         {
             System.IO.File.Delete(path);
-            return new
-                CreateFileResponse(CreateFileResult.Duplicate, null);
+            return new CreateFileResponse(CreateFileResult.Duplicate, null);
         }
 
         return new CreateFileResponse(CreateFileResult.Success,
@@ -126,7 +144,8 @@ public class FileService(
         return OpenFile(file);
     }
 
-    public async Task<DownloadFileResponse> DownloadFileAsync(long id, long userId, CancellationToken cancellationToken)
+    public async Task<DownloadFileResponse> DownloadCourseFileAsync(long id, long userId,
+        CancellationToken cancellationToken)
     {
         var file = await db.Files.AsNoTracking()
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
@@ -146,6 +165,129 @@ public class FileService(
             return new DownloadFileResponse(DownloadFileResult.Forbidden);
 
         return OpenFile(file);
+    }
+
+    public async Task<BindCourseFileResponse> BindCourseFileAsync(long courseId, long fileId, long userId,
+        CancellationToken cancellationToken)
+    {
+        var universityId = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => (long?)u.College.University.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (universityId == null)
+            return new BindCourseFileResponse(BindCourseFileResult.UserNotFound);
+
+        var course = await db.Courses
+            .Include(course => course.University)
+            .SingleOrDefaultAsync(c => c.Id == courseId, cancellationToken);
+        if (course == null)
+            return new BindCourseFileResponse(BindCourseFileResult.CourseNotFound);
+        if (course.University.Id != universityId.Value)
+            return new BindCourseFileResponse(BindCourseFileResult.CourseInOtherUniversity);
+
+        var file = await db.Files
+            .SingleOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+        if (file == null)
+            return new BindCourseFileResponse(BindCourseFileResult.FileNotFound);
+
+        if (await db.CourseFiles.AnyAsync(cf => cf.CourseId == courseId && cf.FileId == fileId,
+                cancellationToken))
+            return new BindCourseFileResponse(BindCourseFileResult.Duplicate);
+
+        db.CourseFiles.Add(new CourseFile { Course = course, File = file });
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return new BindCourseFileResponse(BindCourseFileResult.Duplicate);
+        }
+
+        return new BindCourseFileResponse(BindCourseFileResult.Success,
+            new CourseFileResponse(courseId, fileId));
+    }
+
+    public Task<PagedResponse<FileMetadataResponse>> GetFilesBy(long courseId, PageRequest pageRequest,
+        CancellationToken cancellationToken) =>
+        QueryFilesAsync(courseId, null, pageRequest, cancellationToken);
+
+    public Task<PagedResponse<FileMetadataResponse>> SearchFilesByAsync(long courseId, string keyword,
+        PageRequest pageRequest, CancellationToken cancellationToken) =>
+        QueryFilesAsync(courseId, keyword, pageRequest, cancellationToken);
+
+    public async Task<PagedResponse<CourseResponse>> GetCoursesBy(long fileId, PageRequest pageRequest,
+        CancellationToken cancellationToken)
+    {
+        var query = db.CourseFiles.AsNoTracking()
+            .Where(cf => cf.FileId == fileId)
+            .OrderBy(cf => cf.CourseId);
+        var totalCount = await query.LongCountAsync(cancellationToken);
+        var items = await query
+            .Skip(pageRequest.Skip)
+            .Take(pageRequest.PageSize)
+            .Select(cf => new CourseResponse(
+                cf.Course.Id,
+                cf.Course.Name.Value,
+                cf.Course.University.Id,
+                cf.Course.University.Name.Value,
+                cf.Course.College == null ? null : cf.Course.College.Id,
+                cf.Course.College == null ? null : cf.Course.College.Name.Value,
+                cf.Course.Alias == null ? null : cf.Course.Alias.Value,
+                cf.Course.Hours,
+                cf.Course.CreatedAt,
+                cf.Course.UpdatedAt))
+            .ToListAsync(cancellationToken);
+
+        return new PagedResponse<CourseResponse>(
+            Items: items,
+            Page: pageRequest.Page,
+            PageSize: pageRequest.PageSize,
+            TotalCount: totalCount);
+    }
+
+    private async Task<PagedResponse<FileMetadataResponse>> QueryFilesAsync(long courseId, string? keyword,
+        PageRequest pageRequest, CancellationToken cancellationToken)
+    {
+        var query = db.CourseFiles.AsNoTracking()
+            .Where(cf => cf.CourseId == courseId);
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var pattern = $"%{keyword.Trim()}%";
+            query = query.Where(cf => EF.Functions.Like(cf.File.FriendlyFilename, pattern));
+        }
+
+        query = query.OrderBy(cf => cf.FileId);
+
+        var totalCount = await query.LongCountAsync(cancellationToken);
+        var items = await query
+            .Skip(pageRequest.Skip)
+            .Take(pageRequest.PageSize)
+            .Select(cf => new
+            {
+                cf.File.Id,
+                cf.File.GuidFilename,
+                cf.File.FriendlyFilename,
+                cf.File.Extension,
+                cf.File.Sha256,
+                UploaderUserId = cf.File.Uploader.Id,
+                UploaderUserNickname = cf.File.Uploader.Nickname.Value
+            })
+            .ToListAsync(cancellationToken);
+
+        return new PagedResponse<FileMetadataResponse>(
+            Items: items.Select(f => new FileMetadataResponse(
+                Id: f.Id,
+                GuidFilename: f.GuidFilename.ToString("N"),
+                FriendlyFilename: f.FriendlyFilename,
+                Extension: f.Extension,
+                Sha256Hash: Convert.ToHexStringLower(f.Sha256),
+                UploaderUserId: f.UploaderUserId,
+                UploaderUserNickname: f.UploaderUserNickname)).ToList(),
+            Page: pageRequest.Page,
+            PageSize: pageRequest.PageSize,
+            TotalCount: totalCount);
     }
 
     private DownloadFileResponse OpenFile(Models.File file)
