@@ -52,6 +52,7 @@ public class Program
         builder.Services.AddScoped<ICollegeService, CollegeService>();
         builder.Services.AddScoped<ISettingsService, JsonSettingsService>();
         builder.Services.AddScoped<IFileService, FileService>();
+        builder.Services.AddScoped<ICourseFileService, CourseFileService>();
 
         // JWT
         var jwt = builder.Configuration

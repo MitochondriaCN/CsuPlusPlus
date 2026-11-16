@@ -7,7 +7,5 @@ public record FileMetadataResponse(
     string Extension,
     string Sha256Hash,
     long UploaderUserId,
-    string UploaderUserNickname,
-    long? CourseId,
-    string? CourseName
+    string UploaderUserNickname
 );

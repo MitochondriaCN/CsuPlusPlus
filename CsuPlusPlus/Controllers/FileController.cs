@@ -9,7 +9,7 @@ namespace CsuPlusPlus.Controllers;
 
 [ApiController]
 [Route("file")]
-public class FileController(IFileService fileService) : ControllerBase
+public class FileController(IFileService fileService, ICourseFileService courseFileService) : ControllerBase
 {
     [Authorize(Policy = Policies.UploadGlobalFile)]
     [HttpPost("upload")]
@@ -22,44 +22,49 @@ public class FileController(IFileService fileService) : ControllerBase
         if (userId is null)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        return await UploadFileCoreAsync(
-            request: request,
-            userId: userId.Value,
-            allowCrossUniversity: true,
-            cancellationToken: cancellationToken);
+        return MapCreateFileResult(
+            await fileService.CreateFileAsync(request, userId.Value, cancellationToken));
     }
 
     [Authorize]
     [HttpPost("upload/course")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<FileMetadataResponse>> UploadCourseFile(
-        [FromForm] CreateFileRequest request,
+        [FromForm] CreateFileRequest request, long courseId,
         CancellationToken cancellationToken)
     {
-        if (request.CourseId == null)
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "必须指定课程。");
-
         var userId = User.GetUserId();
         if (userId is null)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        return await UploadFileCoreAsync(
-            request: request,
-            userId: userId.Value,
-            allowCrossUniversity: false,
-            cancellationToken: cancellationToken);
+        var fileResponse = await fileService.CreateFileAsync(request, userId.Value, cancellationToken);
+        if (fileResponse.Result != CreateFileResult.Success)
+            return MapCreateFileFailure(fileResponse);
+
+        var bindResult =
+            await courseFileService.BindCourseFile(courseId, fileResponse.Response!.Id, cancellationToken);
+        return bindResult.Result switch
+        {
+            BindCourseFileResult.Success => Created(uri: null as Uri, value: bindResult.Response),
+            BindCourseFileResult.FileNotFound => Problem(statusCode: StatusCodes.Status404NotFound,
+                title: "未找到文件。"),
+            BindCourseFileResult.CourseNotFound => Problem(statusCode: StatusCodes.Status404NotFound,
+                title: "未找到课程。"),
+            BindCourseFileResult.Duplicate => Problem(statusCode: StatusCodes.Status409Conflict,
+                title: "文件已上传到课程。"),
+            _ => throw new InvalidOperationException("未知结果。")
+        };
     }
 
-    private async Task<ActionResult<FileMetadataResponse>> UploadFileCoreAsync(
-        CreateFileRequest request,
-        long userId,
-        bool allowCrossUniversity,
-        CancellationToken cancellationToken)
+    private ActionResult MapCreateFileResult(CreateFileResponse result) =>
+        result.Result == CreateFileResult.Success
+            ? Created(uri: null as Uri, value: result.Response)
+            : MapCreateFileFailure(result);
+
+    private ActionResult MapCreateFileFailure(CreateFileResponse result)
     {
-        var result = await fileService.CreateFileAsync(request, userId, allowCrossUniversity, cancellationToken);
         return result.Result switch
         {
-            CreateFileResult.Success => Created(uri: null as Uri, value: result.Response),
             CreateFileResult.TooLarge => Problem(
                 statusCode: StatusCodes.Status413PayloadTooLarge,
                 title: "文件超出大小限制。"),
@@ -92,26 +97,25 @@ public class FileController(IFileService fileService) : ControllerBase
     public async Task<IActionResult> DownloadFile(
         [FromRoute] long id,
         CancellationToken cancellationToken) =>
-        await DownloadFileCoreAsync(id, allowCrossUniversity: true, cancellationToken);
+        MapDownloadResult(await fileService.DownloadFileAsync(id, cancellationToken));
 
     [Authorize]
     [EnableRateLimiting(RateLimitPolicies.FileDownload)]
     [HttpGet("download/course/{id:long}")]
     public async Task<IActionResult> DownloadCourseFile(
         [FromRoute] long id,
-        CancellationToken cancellationToken) =>
-        await DownloadFileCoreAsync(id, allowCrossUniversity: false, cancellationToken);
-
-    private async Task<IActionResult> DownloadFileCoreAsync(
-        long id,
-        bool allowCrossUniversity,
         CancellationToken cancellationToken)
     {
         var userId = User.GetUserId();
         if (userId is null)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await fileService.DownloadFileAsync(id, userId.Value, allowCrossUniversity, cancellationToken);
+        return MapDownloadResult(
+            await fileService.DownloadFileAsync(id, userId.Value, cancellationToken));
+    }
+
+    private IActionResult MapDownloadResult(DownloadFileResponse result)
+    {
         return result.Result switch
         {
             DownloadFileResult.Success => File(
@@ -127,6 +131,9 @@ public class FileController(IFileService fileService) : ControllerBase
             DownloadFileResult.ContentMissing => Problem(
                 statusCode: StatusCodes.Status410Gone,
                 title: "文件内容已丢失。"),
+            DownloadFileResult.UserNotFound => Problem(
+                statusCode: StatusCodes.Status401Unauthorized,
+                title: "用户不存在。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
     }

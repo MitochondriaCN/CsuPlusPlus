@@ -11,5 +11,5 @@ public record PageRequest
     [Range(1, 100, ErrorMessage = "每页项目数必须在 1 到 100 之间。")]
     public required int PageSize { get; init; }
 
-    public int Skip => (Page - 1) * PageSize;
+    internal int Skip => (Page - 1) * PageSize;
 }

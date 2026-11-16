@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using CsuPlusPlus.Dtos.File;
 using CsuPlusPlus.Infra;
-using CsuPlusPlus.Models;
 using CsuPlusPlus.Options;
 using CsuPlusPlus.Services.Setting;
 using CsuPlusPlus.Settings;
@@ -19,7 +18,6 @@ public class FileService(
     {
         var file = await db.Files.AsNoTracking()
             .Include(f => f.Uploader)
-            .Include(f => f.Course)
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
 
         return file == null
@@ -31,13 +29,11 @@ public class FileService(
                 Extension: file.Extension,
                 Sha256Hash: Convert.ToHexStringLower(file.Sha256),
                 UploaderUserId: file.Uploader.Id,
-                UploaderUserNickname: file.Uploader.Nickname.Value,
-                CourseId: file.Course?.Id,
-                CourseName: file.Course?.Name.Value);
+                UploaderUserNickname: file.Uploader.Nickname.Value);
     }
 
     public async Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
-        bool allowCrossUniversity, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         var user = await db.Users
             .Include(u => u.College)
@@ -74,24 +70,6 @@ public class FileService(
         if (extension is null)
             return new CreateFileResponse(CreateFileResult.FormatNotSupported, null);
 
-        // 查找目标课程
-        Course? targetCourse = null;
-        if (request.CourseId != null)
-        {
-            var course = await db.Courses
-                .Include(c => c.University)
-                .Where(c => c.Id == request.CourseId)
-                .SingleOrDefaultAsync(cancellationToken);
-
-            if (course == null)
-                return new CreateFileResponse(CreateFileResult.CourseNotFound, null);
-
-            if (!allowCrossUniversity && course.University.Id != user.College.University.Id)
-                return new CreateFileResponse(CreateFileResult.CourseInOtherUniversity, null);
-
-            targetCourse = course;
-        }
-
         // 哈希
         byte[] sha256;
         await using (var stream = request.File.OpenReadStream())
@@ -119,7 +97,6 @@ public class FileService(
             FriendlyFilename = request.FriendlyFilename,
             Sha256 = sha256,
             Uploader = user,
-            Course = targetCourse,
             CreatedAt = DateTimeOffset.UtcNow,
             Extension = extension
         };
@@ -139,27 +116,40 @@ public class FileService(
             await GetFileMetadataAsync(file.Id, cancellationToken));
     }
 
-    public async Task<DownloadFileResponse> DownloadFileAsync(long id, long userId,
-        bool allowCrossUniversity, CancellationToken cancellationToken)
+    public async Task<DownloadFileResponse> DownloadFileAsync(long id, CancellationToken cancellationToken)
     {
         var file = await db.Files.AsNoTracking()
-            .Include(f => f.Course)
-            .ThenInclude(c => c!.University)
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
         if (file == null)
             return new DownloadFileResponse(DownloadFileResult.NotFound);
 
-        if (!allowCrossUniversity && file.Course != null)
-        {
-            var userUniversityId = await db.Users.AsNoTracking()
-                .Where(u => u.Id == userId)
-                .Select(u => (long?)u.College.University.Id)
-                .SingleOrDefaultAsync(cancellationToken);
+        return OpenFile(file);
+    }
 
-            if (userUniversityId == null || userUniversityId != file.Course?.University.Id)
-                return new DownloadFileResponse(DownloadFileResult.Forbidden);
-        }
+    public async Task<DownloadFileResponse> DownloadFileAsync(long id, long userId, CancellationToken cancellationToken)
+    {
+        var file = await db.Files.AsNoTracking()
+            .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
+        if (file == null)
+            return new DownloadFileResponse(DownloadFileResult.NotFound);
 
+        var universityId = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => (long?)u.College.University.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (universityId == null)
+            return new DownloadFileResponse(DownloadFileResult.UserNotFound);
+
+        var sameUniversity = await db.CourseFiles.AsNoTracking()
+            .AnyAsync(cf => cf.FileId == id && cf.Course.University.Id == universityId.Value, cancellationToken);
+        if (!sameUniversity)
+            return new DownloadFileResponse(DownloadFileResult.Forbidden);
+
+        return OpenFile(file);
+    }
+
+    private DownloadFileResponse OpenFile(Models.File file)
+    {
         var path = Path.Combine(fileStorageOptions.Value.RootPath,
             file.GuidFilename.ToString("N") + file.Extension);
         if (!System.IO.File.Exists(path))
