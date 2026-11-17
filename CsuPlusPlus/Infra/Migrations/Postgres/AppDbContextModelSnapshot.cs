@@ -17,7 +17,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261114080610_AddFileUploadMetadata";
+    public override string LastMigrationId => "20261117065632_AddCourseFile";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -103,6 +103,21 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.ToTable("courses");
             });
 
+        modelBuilder.Entity("CsuPlusPlus.Models.CourseFile", b =>
+            {
+                b.Property<long>("CourseId")
+                    .HasColumnType("bigint");
+
+                b.Property<long>("FileId")
+                    .HasColumnType("bigint");
+
+                b.HasKey("CourseId", "FileId");
+
+                b.HasIndex("FileId");
+
+                b.ToTable("course_files");
+            });
+
         modelBuilder.Entity("CsuPlusPlus.Models.File", b =>
             {
                 var id = b.Property<long>("Id")
@@ -111,15 +126,13 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
 
                 NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(id);
 
-                b.Property<long?>("CourseId")
-                    .HasColumnType("bigint");
-
                 b.Property<DateTimeOffset>("CreatedAt")
                     .HasColumnType("timestamp with time zone");
 
                 b.Property<string>("Extension")
                     .IsRequired()
-                    .HasColumnType("text");
+                    .HasMaxLength(10)
+                    .HasColumnType("character varying(10)");
 
                 b.Property<string>("FriendlyFilename")
                     .HasMaxLength(30)
@@ -136,8 +149,6 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bigint");
 
                 b.HasKey("Id");
-
-                b.HasIndex("CourseId");
 
                 b.HasIndex("Sha256")
                     .IsUnique();
@@ -268,19 +279,32 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.Navigation("University");
             });
 
-        modelBuilder.Entity("CsuPlusPlus.Models.File", b =>
+        modelBuilder.Entity("CsuPlusPlus.Models.CourseFile", b =>
             {
                 b.HasOne("CsuPlusPlus.Models.Course", "Course")
                     .WithMany()
-                    .HasForeignKey("CourseId");
+                    .HasForeignKey("CourseId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
 
+                b.HasOne("CsuPlusPlus.Models.File", "File")
+                    .WithMany()
+                    .HasForeignKey("FileId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.Navigation("Course");
+
+                b.Navigation("File");
+            });
+
+        modelBuilder.Entity("CsuPlusPlus.Models.File", b =>
+            {
                 b.HasOne("CsuPlusPlus.Models.User", "Uploader")
                     .WithMany()
                     .HasForeignKey("UploaderId")
                     .OnDelete(DeleteBehavior.Cascade)
                     .IsRequired();
-
-                b.Navigation("Course");
 
                 b.Navigation("Uploader");
             });
