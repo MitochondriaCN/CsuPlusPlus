@@ -25,7 +25,7 @@ public class CourseService(AppDbContext db) : ICourseService
         CancellationToken cancellationToken)
     {
         if (!await db.Universities.AnyAsync(u => u.Id == universityId, cancellationToken))
-            return new GetCourseResponse(GetCourseResult.UniversityNotFound, PagedResponse<CourseResponse>.EmptyPage);
+            return new GetCourseResponse(GetCourseResult.UniversityNotFound);
 
         var query = db.Courses.AsNoTracking().Where(c => c.University.Id == universityId);
         var totalCount = await query.LongCountAsync(cancellationToken);
@@ -49,11 +49,10 @@ public class CourseService(AppDbContext db) : ICourseService
             .SingleOrDefaultAsync(cancellationToken);
 
         if (collegeUniversityId is null)
-            return new GetCourseResponse(GetCourseResult.CollegeNotFound, PagedResponse<CourseResponse>.EmptyPage);
+            return new GetCourseResponse(GetCourseResult.CollegeNotFound);
 
         if (universityId is { } scope && collegeUniversityId != scope)
-            return new GetCourseResponse(GetCourseResult.CollegeInOtherUniversity,
-                PagedResponse<CourseResponse>.EmptyPage);
+            return new GetCourseResponse(GetCourseResult.CollegeInOtherUniversity);
 
         var query = db.Courses.AsNoTracking()
             .Where(c => c.College != null && c.College.Id == collegeId);

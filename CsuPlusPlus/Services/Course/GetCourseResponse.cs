@@ -10,7 +10,7 @@ public record GetSingleCourseResponse(
 
 public record GetCourseResponse(
     GetCourseResult Result,
-    PagedResponse<CourseResponse> Response
+    PagedResponse<CourseResponse>? Response = null
 );
 
 public enum GetCourseResult

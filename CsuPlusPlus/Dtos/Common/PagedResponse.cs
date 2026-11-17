@@ -8,6 +8,4 @@ public record PagedResponse<T>(
 )
 {
     public long TotalPages => (TotalCount + PageSize - 1) / PageSize;
-
-    public static PagedResponse<T> EmptyPage => new([], Page: 1, PageSize: 1, TotalCount: 0);
 }
