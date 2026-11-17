@@ -21,7 +21,7 @@ public class CourseService(AppDbContext db) : ICourseService
             c.CreatedAt,
             c.UpdatedAt);
 
-    public async Task<GetCourseResponse> GetByUniversity(long universityId, PageRequest request,
+    public async Task<GetCourseResponse> GetByUniversityAsync(long universityId, PageRequest request,
         CancellationToken cancellationToken)
     {
         if (!await db.Universities.AnyAsync(u => u.Id == universityId, cancellationToken))
@@ -40,7 +40,7 @@ public class CourseService(AppDbContext db) : ICourseService
             new PagedResponse<CourseResponse>(items, request.Page, request.PageSize, totalCount));
     }
 
-    public async Task<GetCourseResponse> GetByCollege(long collegeId, PageRequest request,
+    public async Task<GetCourseResponse> GetByCollegeAsync(long collegeId, PageRequest request,
         CancellationToken cancellationToken, long? universityId = null)
     {
         var collegeUniversityId = await db.Colleges.AsNoTracking()
@@ -68,7 +68,7 @@ public class CourseService(AppDbContext db) : ICourseService
             new PagedResponse<CourseResponse>(items, request.Page, request.PageSize, totalCount));
     }
 
-    public async Task<GetSingleCourseResponse> GetById(long id, CancellationToken cancellationToken,
+    public async Task<GetSingleCourseResponse> GetByIdAsync(long id, CancellationToken cancellationToken,
         long? universityId = null)
     {
         var courseUniversityId = await db.Courses.AsNoTracking()

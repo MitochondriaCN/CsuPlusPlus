@@ -112,7 +112,7 @@ public class Program
                 policy.RequireRole(nameof(UserRole.Admin)));
             options.AddPolicy(Policies.DownloadGlobalFile, policy =>
                 policy.RequireRole(nameof(UserRole.Admin)));
-            options.AddPolicy(Policies.AccessOwnUniversityFiles, policy => policy
+            options.AddPolicy(Policies.AccessOwnUniversity, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireClaim("university"));
         });

@@ -11,7 +11,7 @@ namespace CsuPlusPlus.Controllers;
 [Route("course")]
 public class CourseController(ICourseService courseService, ICurrentUser currentUser) : ControllerBase
 {
-    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
+    [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpGet("list")]
     public async Task<ActionResult<PagedResponse<CourseResponse>>> List(
         [FromQuery] PageRequest request,
@@ -20,7 +20,7 @@ public class CourseController(ICourseService courseService, ICurrentUser current
         if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.GetByUniversity(universityId, request, cancellationToken);
+        var result = await courseService.GetByUniversityAsync(universityId, request, cancellationToken);
         return result.Result switch
         {
             GetCourseResult.Success => Ok(result.Response),
@@ -31,7 +31,7 @@ public class CourseController(ICourseService courseService, ICurrentUser current
         };
     }
 
-    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
+    [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpGet("list/college")]
     public async Task<ActionResult<PagedResponse<CourseResponse>>> ListByCollege(
         [FromQuery] long collegeId,
@@ -41,7 +41,7 @@ public class CourseController(ICourseService courseService, ICurrentUser current
         if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.GetByCollege(collegeId, request, cancellationToken, universityId);
+        var result = await courseService.GetByCollegeAsync(collegeId, request, cancellationToken, universityId);
         return result.Result switch
         {
             GetCourseResult.Success => Ok(result.Response),
@@ -55,7 +55,7 @@ public class CourseController(ICourseService courseService, ICurrentUser current
         };
     }
 
-    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
+    [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpGet("{id:long}")]
     public async Task<ActionResult<CourseResponse>> GetById(
         [FromRoute] long id,
@@ -64,7 +64,7 @@ public class CourseController(ICourseService courseService, ICurrentUser current
         if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.GetById(id, cancellationToken, universityId);
+        var result = await courseService.GetByIdAsync(id, cancellationToken, universityId);
         return result.Result switch
         {
             GetCourseResult.Success => Ok(result.Response),
