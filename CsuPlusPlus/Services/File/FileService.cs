@@ -157,7 +157,7 @@ public class FileService(
     }
 
     private async Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
-        Course? course, CancellationToken cancellationToken)
+        Models.Course? course, CancellationToken cancellationToken)
     {
         var user = await db.Users
             .Where(u => u.Id == uploaderUserId)
