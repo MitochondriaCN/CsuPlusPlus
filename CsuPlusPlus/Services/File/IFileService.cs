@@ -6,7 +6,8 @@ namespace CsuPlusPlus.Services.File;
 
 public interface IFileService
 {
-    Task<FileMetadataResponse?> GetFileMetadataAsync(long id, CancellationToken cancellationToken);
+    Task<GetFileMetadataResponse> GetFileMetadataAsync(long id, CancellationToken cancellationToken,
+        long? universityId = null);
 
     Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
         CancellationToken cancellationToken);

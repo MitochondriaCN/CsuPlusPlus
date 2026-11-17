@@ -17,22 +17,28 @@ public class FileService(
     ISettingsService settingsService,
     IOptions<FileStorageOptions> fileStorageOptions) : IFileService
 {
-    public async Task<FileMetadataResponse?> GetFileMetadataAsync(long id, CancellationToken cancellationToken)
+    public async Task<GetFileMetadataResponse> GetFileMetadataAsync(long id, CancellationToken cancellationToken,
+        long? universityId = null)
     {
         var file = await db.Files.AsNoTracking()
             .Include(f => f.Uploader)
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
+        if (file == null)
+            return new GetFileMetadataResponse(GetFileMetadataResult.NotFound);
 
-        return file == null
-            ? null
-            : new FileMetadataResponse(
-                Id: file.Id,
-                GuidFilename: file.GuidFilename.ToString("N"),
-                FriendlyFilename: file.FriendlyFilename,
-                Extension: file.Extension,
-                Sha256Hash: Convert.ToHexStringLower(file.Sha256),
-                UploaderUserId: file.Uploader.Id,
-                UploaderUserNickname: file.Uploader.Nickname.Value);
+        if (universityId != null
+            && !await db.CourseFiles.AsNoTracking()
+                .AnyAsync(cf => cf.FileId == id && cf.Course.University.Id == universityId, cancellationToken))
+            return new GetFileMetadataResponse(GetFileMetadataResult.Forbidden);
+
+        return new GetFileMetadataResponse(GetFileMetadataResult.Success, new FileMetadataResponse(
+            Id: file.Id,
+            GuidFilename: file.GuidFilename.ToString("N"),
+            FriendlyFilename: file.FriendlyFilename,
+            Extension: file.Extension,
+            Sha256Hash: Convert.ToHexStringLower(file.Sha256),
+            UploaderUserId: file.Uploader.Id,
+            UploaderUserNickname: file.Uploader.Nickname.Value));
     }
 
     public Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
@@ -196,7 +202,7 @@ public class FileService(
             .SingleOrDefaultAsync(f => f.Sha256 == sha256, cancellationToken);
         if (existingFile != null)
             return new CreateFileResponse(CreateFileResult.Duplicate,
-                await GetFileMetadataAsync(existingFile.Id, cancellationToken));
+                (await GetFileMetadataAsync(existingFile.Id, cancellationToken)).Response);
 
         // 落盘
         var guidFileName = Guid.NewGuid();
@@ -231,7 +237,7 @@ public class FileService(
         }
 
         return new CreateFileResponse(CreateFileResult.Success,
-            await GetFileMetadataAsync(file.Id, cancellationToken));
+            (await GetFileMetadataAsync(file.Id, cancellationToken)).Response);
     }
 
     private async Task<PagedResponse<FileMetadataResponse>> QueryFilesAsync(long universityId, long courseId,

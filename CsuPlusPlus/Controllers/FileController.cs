@@ -12,6 +12,24 @@ namespace CsuPlusPlus.Controllers;
 [Route("file")]
 public class FileController(IFileService fileService, ICurrentUser currentUser) : ControllerBase
 {
+    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
+    [HttpGet]
+    public async Task<ActionResult<FileMetadataResponse>> GetFileMetadata(
+        long id, CancellationToken cancellationToken)
+    {
+        if (currentUser.UniversityId is not { } universityId)
+            return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
+
+        var response = await fileService.GetFileMetadataAsync(id, cancellationToken, universityId);
+        return response.Result switch
+        {
+            GetFileMetadataResult.Success => Ok(response.Response),
+            GetFileMetadataResult.NotFound => Problem(statusCode: StatusCodes.Status404NotFound, title: "文件未找到。"),
+            GetFileMetadataResult.Forbidden => Problem(statusCode: StatusCodes.Status403Forbidden, title: "您无权限访问此文件。"),
+            _ => throw new InvalidOperationException("未知错误。")
+        };
+    }
+
     [Authorize(Policy = Policies.UploadGlobalFile)]
     [HttpPost("upload")]
     [Consumes("multipart/form-data")]
