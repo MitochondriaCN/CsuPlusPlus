@@ -21,22 +21,27 @@ public class CourseService(AppDbContext db) : ICourseService
             c.CreatedAt,
             c.UpdatedAt);
 
-    public async Task<GetCourseResponse> GetByUniversity(long universityId, CancellationToken cancellationToken)
+    public async Task<GetCourseResponse> GetByUniversity(long universityId, PageRequest request,
+        CancellationToken cancellationToken)
     {
         if (!await db.Universities.AnyAsync(u => u.Id == universityId, cancellationToken))
             return new GetCourseResponse(GetCourseResult.UniversityNotFound, PagedResponse<CourseResponse>.EmptyPage);
 
-        var items = await db.Courses.AsNoTracking()
-            .Where(c => c.University.Id == universityId)
+        var query = db.Courses.AsNoTracking().Where(c => c.University.Id == universityId);
+        var totalCount = await query.LongCountAsync(cancellationToken);
+        var items = await query
             .OrderBy(c => c.Id)
+            .Skip(request.Skip)
+            .Take(request.PageSize)
             .Select(ToResponse)
             .ToListAsync(cancellationToken);
 
-        return new GetCourseResponse(GetCourseResult.Success, ToPage(items));
+        return new GetCourseResponse(GetCourseResult.Success,
+            new PagedResponse<CourseResponse>(items, request.Page, request.PageSize, totalCount));
     }
 
-    public async Task<GetCourseResponse> GetByCollege(long collegeId, CancellationToken cancellationToken,
-        long? universityId = null)
+    public async Task<GetCourseResponse> GetByCollege(long collegeId, PageRequest request,
+        CancellationToken cancellationToken, long? universityId = null)
     {
         var collegeUniversityId = await db.Colleges.AsNoTracking()
             .Where(c => c.Id == collegeId)
@@ -50,13 +55,18 @@ public class CourseService(AppDbContext db) : ICourseService
             return new GetCourseResponse(GetCourseResult.CollegeInOtherUniversity,
                 PagedResponse<CourseResponse>.EmptyPage);
 
-        var items = await db.Courses.AsNoTracking()
-            .Where(c => c.College != null && c.College.Id == collegeId)
+        var query = db.Courses.AsNoTracking()
+            .Where(c => c.College != null && c.College.Id == collegeId);
+        var totalCount = await query.LongCountAsync(cancellationToken);
+        var items = await query
             .OrderBy(c => c.Id)
+            .Skip(request.Skip)
+            .Take(request.PageSize)
             .Select(ToResponse)
             .ToListAsync(cancellationToken);
 
-        return new GetCourseResponse(GetCourseResult.Success, ToPage(items));
+        return new GetCourseResponse(GetCourseResult.Success,
+            new PagedResponse<CourseResponse>(items, request.Page, request.PageSize, totalCount));
     }
 
     public async Task<GetSingleCourseResponse> GetById(long id, CancellationToken cancellationToken,
@@ -80,7 +90,4 @@ public class CourseService(AppDbContext db) : ICourseService
 
         return new GetSingleCourseResponse(GetCourseResult.Success, course);
     }
-
-    private static PagedResponse<CourseResponse> ToPage(IReadOnlyList<CourseResponse> items) =>
-        new(items, Page: 1, PageSize: Math.Max(items.Count, 1), TotalCount: items.Count);
 }

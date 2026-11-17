@@ -14,12 +14,13 @@ public class CourseController(ICourseService courseService, ICurrentUser current
     [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
     [HttpGet("list")]
     public async Task<ActionResult<PagedResponse<CourseResponse>>> List(
+        [FromQuery] PageRequest request,
         CancellationToken cancellationToken)
     {
         if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.GetByUniversity(universityId, cancellationToken);
+        var result = await courseService.GetByUniversity(universityId, request, cancellationToken);
         return result.Result switch
         {
             GetCourseResult.Success => Ok(result.Response),
@@ -34,12 +35,13 @@ public class CourseController(ICourseService courseService, ICurrentUser current
     [HttpGet("list/college")]
     public async Task<ActionResult<PagedResponse<CourseResponse>>> ListByCollege(
         [FromQuery] long collegeId,
+        [FromQuery] PageRequest request,
         CancellationToken cancellationToken)
     {
         if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.GetByCollege(collegeId, cancellationToken, universityId);
+        var result = await courseService.GetByCollege(collegeId, request, cancellationToken, universityId);
         return result.Result switch
         {
             GetCourseResult.Success => Ok(result.Response),
