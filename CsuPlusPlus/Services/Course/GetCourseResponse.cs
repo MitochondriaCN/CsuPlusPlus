@@ -18,5 +18,7 @@ public enum GetCourseResult
     Success,
     UniversityNotFound,
     CollegeNotFound,
-    CourseNotFound
+    CollegeInOtherUniversity,
+    CourseNotFound,
+    CourseInOtherUniversity
 }

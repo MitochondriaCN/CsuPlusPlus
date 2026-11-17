@@ -36,16 +36,19 @@ public class CourseController(ICourseService courseService, ICurrentUser current
         [FromQuery] long collegeId,
         CancellationToken cancellationToken)
     {
-        if (currentUser.UniversityId is null)
+        if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.GetByCollege(collegeId, cancellationToken);
+        var result = await courseService.GetByCollege(collegeId, cancellationToken, universityId);
         return result.Result switch
         {
             GetCourseResult.Success => Ok(result.Response),
             GetCourseResult.CollegeNotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "学院不存在。"),
+            GetCourseResult.CollegeInOtherUniversity => Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "只能查询本校学院的课程。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
     }
@@ -56,16 +59,19 @@ public class CourseController(ICourseService courseService, ICurrentUser current
         [FromRoute] long id,
         CancellationToken cancellationToken)
     {
-        if (currentUser.UniversityId is null)
+        if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.GetById(id, cancellationToken);
+        var result = await courseService.GetById(id, cancellationToken, universityId);
         return result.Result switch
         {
             GetCourseResult.Success => Ok(result.Response),
             GetCourseResult.CourseNotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "课程不存在。"),
+            GetCourseResult.CourseInOtherUniversity => Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "只能查询本校课程。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
     }

@@ -35,10 +35,20 @@ public class CourseService(AppDbContext db) : ICourseService
         return new GetCourseResponse(GetCourseResult.Success, ToPage(items));
     }
 
-    public async Task<GetCourseResponse> GetByCollege(long collegeId, CancellationToken cancellationToken)
+    public async Task<GetCourseResponse> GetByCollege(long collegeId, CancellationToken cancellationToken,
+        long? universityId = null)
     {
-        if (!await db.Colleges.AnyAsync(c => c.Id == collegeId, cancellationToken))
+        var collegeUniversityId = await db.Colleges.AsNoTracking()
+            .Where(c => c.Id == collegeId)
+            .Select(c => (long?)c.University.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (collegeUniversityId is null)
             return new GetCourseResponse(GetCourseResult.CollegeNotFound, PagedResponse<CourseResponse>.EmptyPage);
+
+        if (universityId is { } scope && collegeUniversityId != scope)
+            return new GetCourseResponse(GetCourseResult.CollegeInOtherUniversity,
+                PagedResponse<CourseResponse>.EmptyPage);
 
         var items = await db.Courses.AsNoTracking()
             .Where(c => c.College != null && c.College.Id == collegeId)
@@ -49,16 +59,26 @@ public class CourseService(AppDbContext db) : ICourseService
         return new GetCourseResponse(GetCourseResult.Success, ToPage(items));
     }
 
-    public async Task<GetSingleCourseResponse> GetById(long id, CancellationToken cancellationToken)
+    public async Task<GetSingleCourseResponse> GetById(long id, CancellationToken cancellationToken,
+        long? universityId = null)
     {
+        var courseUniversityId = await db.Courses.AsNoTracking()
+            .Where(c => c.Id == id)
+            .Select(c => (long?)c.University.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (courseUniversityId is null)
+            return new GetSingleCourseResponse(GetCourseResult.CourseNotFound);
+
+        if (universityId is { } scope && courseUniversityId != scope)
+            return new GetSingleCourseResponse(GetCourseResult.CourseInOtherUniversity);
+
         var course = await db.Courses.AsNoTracking()
             .Where(c => c.Id == id)
             .Select(ToResponse)
-            .SingleOrDefaultAsync(cancellationToken);
+            .SingleAsync(cancellationToken);
 
-        return course is null
-            ? new GetSingleCourseResponse(GetCourseResult.CourseNotFound)
-            : new GetSingleCourseResponse(GetCourseResult.Success, course);
+        return new GetSingleCourseResponse(GetCourseResult.Success, course);
     }
 
     private static PagedResponse<CourseResponse> ToPage(IReadOnlyList<CourseResponse> items) =>
