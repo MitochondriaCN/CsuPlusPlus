@@ -8,17 +8,17 @@ namespace CsuPlusPlus.Controllers;
 
 [ApiController]
 [Route("profile")]
-public class UserProfileController(IUserProfileService userProfileService) : ControllerBase
+public class UserProfileController(IUserProfileService userProfileService, ICurrentUser currentUser)
+    : ControllerBase
 {
     [Authorize]
     [HttpGet("me")]
     public async Task<ActionResult<UserProfileDto>> Me(CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId is null)
+        if (currentUser.UserId is not { } userId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var profile = await userProfileService.GetProfileAsync(userId.Value, cancellationToken);
+        var profile = await userProfileService.GetProfileAsync(userId, cancellationToken);
         if (profile is null)
             return Problem(statusCode: StatusCodes.Status404NotFound, title: "用户不存在。");
 

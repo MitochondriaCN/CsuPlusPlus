@@ -12,16 +12,13 @@ public class File
 
     public required Guid GuidFilename { get; set; }
 
-    [MaxLength(30)]
-    public string? FriendlyFilename { get; set; }
+    [MaxLength(30)] public string? FriendlyFilename { get; set; }
 
-    public required string Extension { get; set; }
+    [MaxLength(10)] public required string Extension { get; set; }
 
     public required byte[] Sha256 { get; set; }
 
     public required User Uploader { get; set; }
-
-    public Course? Course { get; set; }
 
     public required DateTimeOffset CreatedAt { get; set; }
 }

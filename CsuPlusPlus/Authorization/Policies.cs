@@ -9,4 +9,6 @@ public static class Policies
     public const string UploadGlobalFile = "File.UploadGlobally";
 
     public const string DownloadGlobalFile = "File.DownloadGlobally";
+
+    public const string AccessOwnUniversityFiles = "File.AccessOwnUniversity";
 }

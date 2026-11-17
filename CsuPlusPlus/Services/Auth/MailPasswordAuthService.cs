@@ -38,7 +38,7 @@ public class MailPasswordAuthService(
         if (await db.Users.AnyAsync(u => u.MailAddress.Value.ToLower() == email, cancellationToken))
             return new RegisterResult(RegisterStatus.EmailAlreadyExists);
 
-        var college = await db.Colleges.SingleOrDefaultAsync(
+        var college = await db.Colleges.Include(c => c.University).SingleOrDefaultAsync(
             c => c.Id == request.CollegeId, cancellationToken);
         if (college is null)
             return new RegisterResult(RegisterStatus.CollegeNotFound);
@@ -66,7 +66,7 @@ public class MailPasswordAuthService(
         LoginRequest request, CancellationToken cancellationToken = default)
     {
         var email = NormalizeEmail(request.Email);
-        var user = await db.Users.Include(u => u.College)
+        var user = await db.Users.Include(u => u.College).ThenInclude(c => c.University)
             .SingleOrDefaultAsync(u => u.MailAddress.Value.ToLower() == email, cancellationToken);
         if (user is null)
             return null;
@@ -101,7 +101,9 @@ public class MailPasswordAuthService(
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString(CultureInfo.InvariantCulture)),
                 new Claim(JwtRegisteredClaimNames.Email, user.MailAddress.Value),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
-                new Claim("role", user.Role.ToString())
+                new Claim("role", user.Role.ToString()),
+                new Claim("college", user.College.Id.ToString(CultureInfo.InvariantCulture)),
+                new Claim("university", user.College.University.Id.ToString(CultureInfo.InvariantCulture))
             ])
         });
 

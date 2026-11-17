@@ -1,0 +1,41 @@
+product:
+  type: kmp/lib
+  platforms: [ jvm, android, iosArm64, iosSimulatorArm64, wasmJs ]
+
+dependencies:
+  - $compose.runtime
+  - $compose.foundation
+  - $compose.material3
+  - $compose.ui
+  - $compose.components.resources
+  - $compose.preview
+  - $compose.hotReload.runtimeApi
+  - $libs.androidx.lifecycle.viewmodel.compose
+  - $libs.androidx.lifecycle.runtime.compose
+  - $libs.material3.adaptive.navigation.suite
+  - $libs.icons.lucide.cmp
+  - $libs.koin.core
+  - $libs.koin.compose
+  - $libs.koin.compose.viewmodel
+  - $ktor.client.core
+  - $ktor.client.contentNegotiation
+  - $ktor.serialization.kotlinx.json
+  - $ktor.client.logging
+  - io.ktor:ktor-client-engine-defaults
+
+dependencies@android:
+  - $compose.uiTooling
+
+settings:
+  kotlin:
+    serialization:
+      format: json
+      version: 1.11.0
+  ktor:
+    enabled: true
+  compose:
+    enabled: true
+    resources:
+      packageName: ink.qingshuige.csuplusplus.resources
+      # Generate public accessors so other modules (and previews) can use Res.*
+      exposedAccessors: true

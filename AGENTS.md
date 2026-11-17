@@ -101,7 +101,7 @@ dotnet ef migrations has-pending-model-changes --project CsuPlusPlus -- --enviro
 
 ## 部署
 
-- `.github/workflows/deploy.yml` 仅在推送 `main` 时触发：构建镜像 → 推送 GHCR → SSH 执行 `scripts/deploy.sh` 更新 `csuplusplus` 容器。
+- `.github/workflows/deploy.yml` 仅在推送 `main` 时触发：构建镜像 → 推送 GHCR → SSH 执行 `scripts/deploy.sh` 更新 `csuplusplus` 容器。`client/` 目录下的改动通过 `paths-ignore` 排除，不触发部署。
 - 服务器配置放在 `/opt/csuplusplus/app.env`，至少包含 `ConnectionStrings__DefaultConnection` 与 `Jwt__Secret`，不要提交到 Git。
 - 生产容器映射 `8080`，部署以 `/health/check` 返回 `200` 作为成功判据；数据库迁移在应用启动时自动执行且不会回滚。
 - 详细步骤见 `README.md`（注意其中 .NET 10 / dotnet-ef 10.0.13 的描述已过时，以本文件和 csproj 为准）。
