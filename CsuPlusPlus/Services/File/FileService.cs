@@ -35,12 +35,125 @@ public class FileService(
                 UploaderUserNickname: file.Uploader.Nickname.Value);
     }
 
-    public async Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
-        long? courseId, CancellationToken cancellationToken)
+    public Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
+        CancellationToken cancellationToken) =>
+        CreateFileAsync(request, uploaderUserId, null, cancellationToken);
+
+    public async Task<CreateFileResponse> CreateCourseFileAsync(CreateFileRequest request, long uploaderUserId,
+        long courseId, long universityId, CancellationToken cancellationToken)
+    {
+        var course = await db.Courses.Include(c => c.University)
+            .SingleOrDefaultAsync(c => c.Id == courseId, cancellationToken);
+        if (course == null)
+            return new CreateFileResponse(CreateFileResult.CourseNotFound, null);
+        if (course.University.Id != universityId)
+            return new CreateFileResponse(CreateFileResult.CourseInOtherUniversity, null);
+
+        return await CreateFileAsync(request, uploaderUserId, course, cancellationToken);
+    }
+
+    public async Task<DownloadFileResponse> DownloadFileAsync(long id, CancellationToken cancellationToken)
+    {
+        var file = await db.Files.AsNoTracking()
+            .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
+        if (file == null)
+            return new DownloadFileResponse(DownloadFileResult.NotFound);
+
+        return OpenFile(file);
+    }
+
+    public async Task<DownloadFileResponse> DownloadCourseFileAsync(long id, long universityId,
+        CancellationToken cancellationToken)
+    {
+        var file = await db.Files.AsNoTracking()
+            .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
+        if (file == null)
+            return new DownloadFileResponse(DownloadFileResult.NotFound);
+
+        var sameUniversity = await db.CourseFiles.AsNoTracking()
+            .AnyAsync(cf => cf.FileId == id && cf.Course.University.Id == universityId, cancellationToken);
+        if (!sameUniversity)
+            return new DownloadFileResponse(DownloadFileResult.Forbidden);
+
+        return OpenFile(file);
+    }
+
+    public async Task<BindCourseFileResponse> BindCourseFileAsync(long courseId, long fileId, long universityId,
+        CancellationToken cancellationToken)
+    {
+        var course = await db.Courses
+            .Include(course => course.University)
+            .SingleOrDefaultAsync(c => c.Id == courseId, cancellationToken);
+        if (course == null)
+            return new BindCourseFileResponse(BindCourseFileResult.CourseNotFound);
+        if (course.University.Id != universityId)
+            return new BindCourseFileResponse(BindCourseFileResult.CourseInOtherUniversity);
+
+        var file = await db.Files
+            .SingleOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+        if (file == null)
+            return new BindCourseFileResponse(BindCourseFileResult.FileNotFound);
+
+        if (await db.CourseFiles.AnyAsync(cf => cf.CourseId == courseId && cf.FileId == fileId,
+                cancellationToken))
+            return new BindCourseFileResponse(BindCourseFileResult.Duplicate);
+
+        db.CourseFiles.Add(new CourseFile { Course = course, File = file });
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return new BindCourseFileResponse(BindCourseFileResult.Duplicate);
+        }
+
+        return new BindCourseFileResponse(BindCourseFileResult.Success,
+            new CourseFileResponse(courseId, fileId));
+    }
+
+    public Task<PagedResponse<FileMetadataResponse>> GetFilesBy(long universityId, long courseId,
+        PageRequest pageRequest, CancellationToken cancellationToken) =>
+        QueryFilesAsync(universityId, courseId, null, pageRequest, cancellationToken);
+
+    public Task<PagedResponse<FileMetadataResponse>> SearchFilesByAsync(long universityId, long courseId,
+        string keyword, PageRequest pageRequest, CancellationToken cancellationToken) =>
+        QueryFilesAsync(universityId, courseId, keyword, pageRequest, cancellationToken);
+
+    public async Task<PagedResponse<CourseResponse>> GetCoursesBy(long fileId, PageRequest pageRequest,
+        CancellationToken cancellationToken)
+    {
+        var query = db.CourseFiles.AsNoTracking()
+            .Where(cf => cf.FileId == fileId)
+            .OrderBy(cf => cf.CourseId);
+        var totalCount = await query.LongCountAsync(cancellationToken);
+        var items = await query
+            .Skip(pageRequest.Skip)
+            .Take(pageRequest.PageSize)
+            .Select(cf => new CourseResponse(
+                cf.Course.Id,
+                cf.Course.Name.Value,
+                cf.Course.University.Id,
+                cf.Course.University.Name.Value,
+                cf.Course.College == null ? null : cf.Course.College.Id,
+                cf.Course.College == null ? null : cf.Course.College.Name.Value,
+                cf.Course.Alias == null ? null : cf.Course.Alias.Value,
+                cf.Course.Hours,
+                cf.Course.CreatedAt,
+                cf.Course.UpdatedAt))
+            .ToListAsync(cancellationToken);
+
+        return new PagedResponse<CourseResponse>(
+            Items: items,
+            Page: pageRequest.Page,
+            PageSize: pageRequest.PageSize,
+            TotalCount: totalCount);
+    }
+
+    private async Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
+        Course? course, CancellationToken cancellationToken)
     {
         var user = await db.Users
-            .Include(u => u.College)
-            .ThenInclude(c => c.University)
             .Where(u => u.Id == uploaderUserId)
             .SingleOrDefaultAsync(cancellationToken);
         if (user == null)
@@ -85,19 +198,6 @@ public class FileService(
             return new CreateFileResponse(CreateFileResult.Duplicate,
                 await GetFileMetadataAsync(existingFile.Id, cancellationToken));
 
-        // 校验课程
-        Course? course = null;
-        if (courseId is not null)
-        {
-            course = await db.Courses
-                .Include(c => c.University)
-                .SingleOrDefaultAsync(c => c.Id == courseId, cancellationToken);
-            if (course == null)
-                return new CreateFileResponse(CreateFileResult.CourseNotFound, null);
-            if (course.University.Id != user.College.University.Id)
-                return new CreateFileResponse(CreateFileResult.CourseInOtherUniversity, null);
-        }
-
         // 落盘
         var guidFileName = Guid.NewGuid();
         Directory.CreateDirectory(fileStorageOptions.Value.RootPath);
@@ -134,123 +234,11 @@ public class FileService(
             await GetFileMetadataAsync(file.Id, cancellationToken));
     }
 
-    public async Task<DownloadFileResponse> DownloadFileAsync(long id, CancellationToken cancellationToken)
-    {
-        var file = await db.Files.AsNoTracking()
-            .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
-        if (file == null)
-            return new DownloadFileResponse(DownloadFileResult.NotFound);
-
-        return OpenFile(file);
-    }
-
-    public async Task<DownloadFileResponse> DownloadCourseFileAsync(long id, long userId,
-        CancellationToken cancellationToken)
-    {
-        var file = await db.Files.AsNoTracking()
-            .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
-        if (file == null)
-            return new DownloadFileResponse(DownloadFileResult.NotFound);
-
-        var universityId = await db.Users.AsNoTracking()
-            .Where(u => u.Id == userId)
-            .Select(u => (long?)u.College.University.Id)
-            .SingleOrDefaultAsync(cancellationToken);
-        if (universityId == null)
-            return new DownloadFileResponse(DownloadFileResult.UserNotFound);
-
-        var sameUniversity = await db.CourseFiles.AsNoTracking()
-            .AnyAsync(cf => cf.FileId == id && cf.Course.University.Id == universityId.Value, cancellationToken);
-        if (!sameUniversity)
-            return new DownloadFileResponse(DownloadFileResult.Forbidden);
-
-        return OpenFile(file);
-    }
-
-    public async Task<BindCourseFileResponse> BindCourseFileAsync(long courseId, long fileId, long userId,
-        CancellationToken cancellationToken)
-    {
-        var universityId = await db.Users.AsNoTracking()
-            .Where(u => u.Id == userId)
-            .Select(u => (long?)u.College.University.Id)
-            .SingleOrDefaultAsync(cancellationToken);
-        if (universityId == null)
-            return new BindCourseFileResponse(BindCourseFileResult.UserNotFound);
-
-        var course = await db.Courses
-            .Include(course => course.University)
-            .SingleOrDefaultAsync(c => c.Id == courseId, cancellationToken);
-        if (course == null)
-            return new BindCourseFileResponse(BindCourseFileResult.CourseNotFound);
-        if (course.University.Id != universityId.Value)
-            return new BindCourseFileResponse(BindCourseFileResult.CourseInOtherUniversity);
-
-        var file = await db.Files
-            .SingleOrDefaultAsync(f => f.Id == fileId, cancellationToken);
-        if (file == null)
-            return new BindCourseFileResponse(BindCourseFileResult.FileNotFound);
-
-        if (await db.CourseFiles.AnyAsync(cf => cf.CourseId == courseId && cf.FileId == fileId,
-                cancellationToken))
-            return new BindCourseFileResponse(BindCourseFileResult.Duplicate);
-
-        db.CourseFiles.Add(new CourseFile { Course = course, File = file });
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            return new BindCourseFileResponse(BindCourseFileResult.Duplicate);
-        }
-
-        return new BindCourseFileResponse(BindCourseFileResult.Success,
-            new CourseFileResponse(courseId, fileId));
-    }
-
-    public Task<PagedResponse<FileMetadataResponse>> GetFilesBy(long courseId, PageRequest pageRequest,
-        CancellationToken cancellationToken) =>
-        QueryFilesAsync(courseId, null, pageRequest, cancellationToken);
-
-    public Task<PagedResponse<FileMetadataResponse>> SearchFilesByAsync(long courseId, string keyword,
-        PageRequest pageRequest, CancellationToken cancellationToken) =>
-        QueryFilesAsync(courseId, keyword, pageRequest, cancellationToken);
-
-    public async Task<PagedResponse<CourseResponse>> GetCoursesBy(long fileId, PageRequest pageRequest,
-        CancellationToken cancellationToken)
+    private async Task<PagedResponse<FileMetadataResponse>> QueryFilesAsync(long universityId, long courseId,
+        string? keyword, PageRequest pageRequest, CancellationToken cancellationToken)
     {
         var query = db.CourseFiles.AsNoTracking()
-            .Where(cf => cf.FileId == fileId)
-            .OrderBy(cf => cf.CourseId);
-        var totalCount = await query.LongCountAsync(cancellationToken);
-        var items = await query
-            .Skip(pageRequest.Skip)
-            .Take(pageRequest.PageSize)
-            .Select(cf => new CourseResponse(
-                cf.Course.Id,
-                cf.Course.Name.Value,
-                cf.Course.University.Id,
-                cf.Course.University.Name.Value,
-                cf.Course.College == null ? null : cf.Course.College.Id,
-                cf.Course.College == null ? null : cf.Course.College.Name.Value,
-                cf.Course.Alias == null ? null : cf.Course.Alias.Value,
-                cf.Course.Hours,
-                cf.Course.CreatedAt,
-                cf.Course.UpdatedAt))
-            .ToListAsync(cancellationToken);
-
-        return new PagedResponse<CourseResponse>(
-            Items: items,
-            Page: pageRequest.Page,
-            PageSize: pageRequest.PageSize,
-            TotalCount: totalCount);
-    }
-
-    private async Task<PagedResponse<FileMetadataResponse>> QueryFilesAsync(long courseId, string? keyword,
-        PageRequest pageRequest, CancellationToken cancellationToken)
-    {
-        var query = db.CourseFiles.AsNoTracking()
-            .Where(cf => cf.CourseId == courseId);
+            .Where(cf => cf.CourseId == courseId && cf.Course.University.Id == universityId);
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {

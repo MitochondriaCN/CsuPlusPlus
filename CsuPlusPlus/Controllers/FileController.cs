@@ -10,7 +10,7 @@ namespace CsuPlusPlus.Controllers;
 
 [ApiController]
 [Route("file")]
-public class FileController(IFileService fileService) : ControllerBase
+public class FileController(IFileService fileService, ICurrentUser currentUser) : ControllerBase
 {
     [Authorize(Policy = Policies.UploadGlobalFile)]
     [HttpPost("upload")]
@@ -19,58 +19,67 @@ public class FileController(IFileService fileService) : ControllerBase
         [FromForm] CreateFileRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId is null)
+        if (currentUser.UserId is not { } userId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
         return MapCreateFileResult(
-            await fileService.CreateFileAsync(request, userId.Value, null, cancellationToken));
+            await fileService.CreateFileAsync(request, userId, cancellationToken));
     }
 
-    [Authorize]
+    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
     [HttpPost("upload/course")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<FileMetadataResponse>> UploadCourseFile(
         [FromForm] CreateFileRequest request, long courseId,
         CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId is null)
+        if (currentUser is not { UserId: { } userId, UniversityId: { } universityId })
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
         return MapCreateFileResult(
-            await fileService.CreateFileAsync(request, userId.Value, courseId, cancellationToken));
+            await fileService.CreateCourseFileAsync(request, userId, courseId, universityId,
+                cancellationToken));
     }
 
-    [Authorize]
+    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
     [HttpGet("list/course")]
     public async Task<ActionResult<PagedResponse<FileMetadataResponse>>> ListCourseFiles(
         [FromQuery] long courseId,
         [FromQuery] PageRequest request,
-        CancellationToken cancellationToken) =>
-        Ok(await fileService.GetFilesBy(courseId, request, cancellationToken));
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UniversityId is not { } universityId)
+            return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-    [Authorize]
+        return Ok(await fileService.GetFilesBy(universityId, courseId, request, cancellationToken));
+    }
+
+    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
     [HttpGet("search/course")]
     public async Task<ActionResult<PagedResponse<FileMetadataResponse>>> SearchCourseFiles(
         [FromQuery] long courseId,
         [FromQuery] string keyword,
         [FromQuery] PageRequest request,
-        CancellationToken cancellationToken) =>
-        Ok(await fileService.SearchFilesByAsync(courseId, keyword, request, cancellationToken));
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UniversityId is not { } universityId)
+            return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-    [Authorize]
+        return Ok(await fileService.SearchFilesByAsync(universityId, courseId, keyword, request,
+            cancellationToken));
+    }
+
+    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
     [HttpPost("bind/course")]
     public async Task<ActionResult<CourseFileResponse>> BindCourseFile(
         [FromQuery] long courseId,
         [FromQuery] long fileId,
         CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId is null)
+        if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await fileService.BindCourseFileAsync(courseId, fileId, userId.Value, cancellationToken);
+        var result = await fileService.BindCourseFileAsync(courseId, fileId, universityId, cancellationToken);
         return result.Result switch
         {
             BindCourseFileResult.Success => Ok(result.Response),
@@ -82,8 +91,6 @@ public class FileController(IFileService fileService) : ControllerBase
                 title: "只能绑定本校课程。"),
             BindCourseFileResult.Duplicate => Problem(statusCode: StatusCodes.Status409Conflict,
                 title: "文件已绑定到课程。"),
-            BindCourseFileResult.UserNotFound => Problem(statusCode: StatusCodes.Status401Unauthorized,
-                title: "用户不存在。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
     }
@@ -131,19 +138,18 @@ public class FileController(IFileService fileService) : ControllerBase
         CancellationToken cancellationToken) =>
         MapDownloadResult(await fileService.DownloadFileAsync(id, cancellationToken));
 
-    [Authorize]
+    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
     [EnableRateLimiting(RateLimitPolicies.FileDownload)]
     [HttpGet("download/course/{id:long}")]
     public async Task<IActionResult> DownloadCourseFile(
         [FromRoute] long id,
         CancellationToken cancellationToken)
     {
-        var userId = User.GetUserId();
-        if (userId is null)
+        if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
         return MapDownloadResult(
-            await fileService.DownloadCourseFileAsync(id, userId.Value, cancellationToken));
+            await fileService.DownloadCourseFileAsync(id, universityId, cancellationToken));
     }
 
     private IActionResult MapDownloadResult(DownloadFileResponse result)
@@ -163,9 +169,6 @@ public class FileController(IFileService fileService) : ControllerBase
             DownloadFileResult.ContentMissing => Problem(
                 statusCode: StatusCodes.Status410Gone,
                 title: "文件内容已丢失。"),
-            DownloadFileResult.UserNotFound => Problem(
-                statusCode: StatusCodes.Status401Unauthorized,
-                title: "用户不存在。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
     }

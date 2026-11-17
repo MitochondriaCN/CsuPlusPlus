@@ -45,6 +45,8 @@ public class Program
             builder.Configuration.GetSection(FileStorageOptions.SectionName));
 
         // Services
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
         builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         builder.Services.AddScoped<IAuthService, MailPasswordAuthService>();
         builder.Services.AddScoped<IUserProfileService, UserProfileService>();
@@ -108,6 +110,9 @@ public class Program
                 policy.RequireRole(nameof(UserRole.Admin)));
             options.AddPolicy(Policies.DownloadGlobalFile, policy =>
                 policy.RequireRole(nameof(UserRole.Admin)));
+            options.AddPolicy(Policies.AccessOwnUniversityFiles, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim("university"));
         });
 
         // Controllers
