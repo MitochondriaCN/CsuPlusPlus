@@ -14,6 +14,7 @@ data class NetworkConfig(
         get() = if (baseUrl.endsWith('/')) baseUrl else "$baseUrl/"
 
     companion object {
-        const val DEFAULT_BASE_URL = "http://localhost:5253/"
+        const val DEFAULT_ROOT_URL = "https://csupp.qingshuige.ink"
+        const val DEFAULT_BASE_URL = "$DEFAULT_ROOT_URL/api"
     }
 }

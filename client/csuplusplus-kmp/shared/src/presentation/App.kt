@@ -11,12 +11,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.House
 import com.composables.icons.lucide.Lucide
+import ink.qingshuige.csuplusplus.core.network.TokenProvider
 import ink.qingshuige.csuplusplus.di.appModule
+import ink.qingshuige.csuplusplus.presentation.page.auth.AuthPage
 import ink.qingshuige.csuplusplus.presentation.page.home.HomePage
 import org.jetbrains.compose.reload.DevelopmentEntryPoint
 import org.koin.compose.KoinApplication
+import org.koin.compose.koinInject
 import org.koin.dsl.koinConfiguration
 
 @Composable
@@ -31,24 +35,31 @@ fun App() {
 }
 
 @Composable
-private fun AppContent() {
+private fun AppContent(
+    tokenProvider: TokenProvider = koinInject(),
+) {
+    val token by tokenProvider.tokenFlow.collectAsStateWithLifecycle()
     var currentDestination by rememberSaveable { mutableStateOf(NavigationDestinations.HOME) }
 
     MaterialTheme {
-        NavigationSuiteScaffold(
-            navigationSuiteItems = {
-                NavigationDestinations.entries.forEach {
-                    item(
-                        selected = it == currentDestination,
-                        onClick = { currentDestination = it },
-                        icon = { Icon(it.icon, contentDescription = it.description) },
-                        label = { Text(it.label) }
-                    )
+        if (token == null) {
+            AuthPage(onFinished = {})
+        } else {
+            NavigationSuiteScaffold(
+                navigationSuiteItems = {
+                    NavigationDestinations.entries.forEach {
+                        item(
+                            selected = it == currentDestination,
+                            onClick = { currentDestination = it },
+                            icon = { Icon(it.icon, contentDescription = it.description) },
+                            label = { Text(it.label) }
+                        )
+                    }
                 }
-            }
-        ) {
-            when (currentDestination) {
-                NavigationDestinations.HOME -> HomePage()
+            ) {
+                when (currentDestination) {
+                    NavigationDestinations.HOME -> HomePage()
+                }
             }
         }
     }

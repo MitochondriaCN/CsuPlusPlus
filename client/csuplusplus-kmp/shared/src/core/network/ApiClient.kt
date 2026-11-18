@@ -9,6 +9,8 @@ import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.*
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.io.IOException
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -113,6 +115,7 @@ class ApiClient(
 
     @PublishedApi
     internal suspend inline fun <reified T> decodeResponse(response: HttpResponse): T {
+        // 成功与否全看StatusCode
         if (!response.status.isSuccess()) {
             throw buildHttpException(response)
         }
@@ -146,7 +149,11 @@ class ApiClient(
 
     @PublishedApi
     internal suspend fun buildHttpException(response: HttpResponse): ApiException {
-        val rawBody = runCatching { response.bodyAsText() }.getOrNull()
+        val rawBody = runCatching { response.bodyAsText() }.onFailure {
+            if (it is CancellationException) {
+                currentCoroutineContext().ensureActive()
+            }
+        }.getOrNull()
         val problem = rawBody
             ?.takeIf { it.isNotBlank() }
             ?.let { text -> runCatching { json.decodeFromString<ProblemDetails>(text) }.getOrNull() }
