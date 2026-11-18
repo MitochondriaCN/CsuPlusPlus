@@ -1,19 +1,24 @@
 package ink.qingshuige.csuplusplus.presentation
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.House
 import com.composables.icons.lucide.Lucide
+import ink.qingshuige.csuplusplus.core.network.BindPlatformTokenStorageContext
 import ink.qingshuige.csuplusplus.core.network.TokenProvider
 import ink.qingshuige.csuplusplus.di.appModule
 import ink.qingshuige.csuplusplus.presentation.page.auth.AuthPage
@@ -27,6 +32,7 @@ import org.koin.dsl.koinConfiguration
 @Preview
 @DevelopmentEntryPoint
 fun App() {
+    BindPlatformTokenStorageContext()
     KoinApplication(
         configuration = koinConfiguration { modules(appModule) }
     ) {
@@ -38,11 +44,18 @@ fun App() {
 private fun AppContent(
     tokenProvider: TokenProvider = koinInject(),
 ) {
+    val isReady by tokenProvider.isReady.collectAsStateWithLifecycle()
     val token by tokenProvider.tokenFlow.collectAsStateWithLifecycle()
     var currentDestination by rememberSaveable { mutableStateOf(NavigationDestinations.HOME) }
 
+    LaunchedEffect(tokenProvider) {
+        tokenProvider.awaitReady()
+    }
+
     MaterialTheme {
-        if (token == null) {
+        if (!isReady) {
+            Surface(modifier = Modifier.fillMaxSize()) {}
+        } else if (token == null) {
             AuthPage(onFinished = {})
         } else {
             NavigationSuiteScaffold(

@@ -1,9 +1,10 @@
 package ink.qingshuige.csuplusplus.di
 
 import ink.qingshuige.csuplusplus.core.network.ApiClient
-import ink.qingshuige.csuplusplus.core.network.InMemoryTokenProvider
 import ink.qingshuige.csuplusplus.core.network.NetworkConfig
+import ink.qingshuige.csuplusplus.core.network.PersistentTokenProvider
 import ink.qingshuige.csuplusplus.core.network.TokenProvider
+import ink.qingshuige.csuplusplus.core.network.getOrCreateAuthKSafe
 import ink.qingshuige.csuplusplus.data.api.*
 import io.ktor.client.*
 import io.ktor.client.plugins.*
@@ -27,7 +28,7 @@ val networkModule = module {
         }
     }
 
-    single<TokenProvider> { InMemoryTokenProvider() }
+    single<TokenProvider> { PersistentTokenProvider(getOrCreateAuthKSafe()) }
 
     single {
         val config: NetworkConfig = get()
