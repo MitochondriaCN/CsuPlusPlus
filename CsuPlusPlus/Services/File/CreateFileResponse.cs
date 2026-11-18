@@ -3,11 +3,11 @@ using CsuPlusPlus.Dtos.File;
 namespace CsuPlusPlus.Services.File;
 
 public record CreateFileResponse(
-    CreateFileResult Result,
+    CreateFileStatus Status,
     FileMetadataResponse? Response
 );
 
-public enum CreateFileResult
+public enum CreateFileStatus
 {
     Success,
     TooLarge,

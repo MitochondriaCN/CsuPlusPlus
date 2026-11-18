@@ -3,11 +3,11 @@ using CsuPlusPlus.Dtos.File;
 namespace CsuPlusPlus.Services.File;
 
 public record GetFileMetadataResponse(
-    GetFileMetadataResult Result,
+    GetFileMetadataStatus Status,
     FileMetadataResponse? Response = null
 );
 
-public enum GetFileMetadataResult
+public enum GetFileMetadataStatus
 {
     Success,
     NotFound,

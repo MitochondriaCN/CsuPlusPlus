@@ -24,14 +24,14 @@ public class FileService(
             .Include(f => f.Uploader)
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
         if (file == null)
-            return new GetFileMetadataResponse(GetFileMetadataResult.NotFound);
+            return new GetFileMetadataResponse(GetFileMetadataStatus.NotFound);
 
         if (universityId != null
             && !await db.CourseFiles.AsNoTracking()
                 .AnyAsync(cf => cf.FileId == id && cf.Course.University.Id == universityId, cancellationToken))
-            return new GetFileMetadataResponse(GetFileMetadataResult.Forbidden);
+            return new GetFileMetadataResponse(GetFileMetadataStatus.Forbidden);
 
-        return new GetFileMetadataResponse(GetFileMetadataResult.Success, new FileMetadataResponse(
+        return new GetFileMetadataResponse(GetFileMetadataStatus.Success, new FileMetadataResponse(
             Id: file.Id,
             GuidFilename: file.GuidFilename.ToString("N"),
             FriendlyFilename: file.FriendlyFilename,
@@ -51,9 +51,9 @@ public class FileService(
         var course = await db.Courses.Include(c => c.University)
             .SingleOrDefaultAsync(c => c.Id == courseId, cancellationToken);
         if (course == null)
-            return new CreateFileResponse(CreateFileResult.CourseNotFound, null);
+            return new CreateFileResponse(CreateFileStatus.CourseNotFound, null);
         if (course.University.Id != universityId)
-            return new CreateFileResponse(CreateFileResult.CourseInOtherUniversity, null);
+            return new CreateFileResponse(CreateFileStatus.CourseInOtherUniversity, null);
 
         return await CreateFileAsync(request, uploaderUserId, course, cancellationToken);
     }
@@ -63,7 +63,7 @@ public class FileService(
         var file = await db.Files.AsNoTracking()
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
         if (file == null)
-            return new DownloadFileResponse(DownloadFileResult.NotFound);
+            return new DownloadFileResponse(DownloadFileStatus.NotFound);
 
         return OpenFile(file);
     }
@@ -74,12 +74,12 @@ public class FileService(
         var file = await db.Files.AsNoTracking()
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
         if (file == null)
-            return new DownloadFileResponse(DownloadFileResult.NotFound);
+            return new DownloadFileResponse(DownloadFileStatus.NotFound);
 
         var sameUniversity = await db.CourseFiles.AsNoTracking()
             .AnyAsync(cf => cf.FileId == id && cf.Course.University.Id == universityId, cancellationToken);
         if (!sameUniversity)
-            return new DownloadFileResponse(DownloadFileResult.Forbidden);
+            return new DownloadFileResponse(DownloadFileStatus.Forbidden);
 
         return OpenFile(file);
     }
@@ -91,18 +91,18 @@ public class FileService(
             .Include(course => course.University)
             .SingleOrDefaultAsync(c => c.Id == courseId, cancellationToken);
         if (course == null)
-            return new BindCourseFileResponse(BindCourseFileResult.CourseNotFound);
+            return new BindCourseFileResponse(BindCourseFileStatus.CourseNotFound);
         if (course.University.Id != universityId)
-            return new BindCourseFileResponse(BindCourseFileResult.CourseInOtherUniversity);
+            return new BindCourseFileResponse(BindCourseFileStatus.CourseInOtherUniversity);
 
         var file = await db.Files
             .SingleOrDefaultAsync(f => f.Id == fileId, cancellationToken);
         if (file == null)
-            return new BindCourseFileResponse(BindCourseFileResult.FileNotFound);
+            return new BindCourseFileResponse(BindCourseFileStatus.FileNotFound);
 
         if (await db.CourseFiles.AnyAsync(cf => cf.CourseId == courseId && cf.FileId == fileId,
                 cancellationToken))
-            return new BindCourseFileResponse(BindCourseFileResult.Duplicate);
+            return new BindCourseFileResponse(BindCourseFileStatus.Duplicate);
 
         db.CourseFiles.Add(new CourseFile { Course = course, File = file });
         try
@@ -111,10 +111,10 @@ public class FileService(
         }
         catch (DbUpdateException)
         {
-            return new BindCourseFileResponse(BindCourseFileResult.Duplicate);
+            return new BindCourseFileResponse(BindCourseFileStatus.Duplicate);
         }
 
-        return new BindCourseFileResponse(BindCourseFileResult.Success,
+        return new BindCourseFileResponse(BindCourseFileStatus.Success,
             new CourseFileResponse(courseId, fileId));
     }
 
@@ -163,7 +163,7 @@ public class FileService(
             .Where(u => u.Id == uploaderUserId)
             .SingleOrDefaultAsync(cancellationToken);
         if (user == null)
-            return new CreateFileResponse(CreateFileResult.UserNotFound, null);
+            return new CreateFileResponse(CreateFileStatus.UserNotFound, null);
 
         var settings =
             await settingsService.GetAsync(SettingsKey.UserFile, UserFileSettings.Default, cancellationToken);
@@ -177,11 +177,11 @@ public class FileService(
         var maxUploadCount = settings.MaxUploadsOfDay;
 
         if (todayUploadCount >= maxUploadCount)
-            return new CreateFileResponse(CreateFileResult.DailyUploadLimitExceeded, null);
+            return new CreateFileResponse(CreateFileStatus.DailyUploadLimitExceeded, null);
 
         // 校验大小
         if (request.File.Length > settings.MaxFileSizeBytes)
-            return new CreateFileResponse(CreateFileResult.TooLarge, null);
+            return new CreateFileResponse(CreateFileStatus.TooLarge, null);
 
         // 校验格式
         FileFormat format;
@@ -190,7 +190,7 @@ public class FileService(
 
         var extension = format.ToExtension();
         if (extension is null)
-            return new CreateFileResponse(CreateFileResult.FormatNotSupported, null);
+            return new CreateFileResponse(CreateFileStatus.FormatNotSupported, null);
 
         // 哈希
         byte[] sha256;
@@ -201,7 +201,7 @@ public class FileService(
         var existingFile = await db.Files.AsNoTracking()
             .SingleOrDefaultAsync(f => f.Sha256 == sha256, cancellationToken);
         if (existingFile != null)
-            return new CreateFileResponse(CreateFileResult.Duplicate,
+            return new CreateFileResponse(CreateFileStatus.Duplicate,
                 (await GetFileMetadataAsync(existingFile.Id, cancellationToken)).Response);
 
         // 落盘
@@ -233,10 +233,10 @@ public class FileService(
         catch (DbUpdateException)
         {
             System.IO.File.Delete(path);
-            return new CreateFileResponse(CreateFileResult.Duplicate, null);
+            return new CreateFileResponse(CreateFileStatus.Duplicate, null);
         }
 
-        return new CreateFileResponse(CreateFileResult.Success,
+        return new CreateFileResponse(CreateFileStatus.Success,
             (await GetFileMetadataAsync(file.Id, cancellationToken)).Response);
     }
 
@@ -289,7 +289,7 @@ public class FileService(
         var path = Path.Combine(fileStorageOptions.Value.RootPath,
             file.GuidFilename.ToString("N") + file.Extension);
         if (!System.IO.File.Exists(path))
-            return new DownloadFileResponse(DownloadFileResult.ContentMissing);
+            return new DownloadFileResponse(DownloadFileStatus.ContentMissing);
 
         var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
             64 * 1024, useAsync: true);
@@ -298,7 +298,7 @@ public class FileService(
             : Path.GetFileName(file.FriendlyFilename);
 
         return new DownloadFileResponse(
-            DownloadFileResult.Success,
+            DownloadFileStatus.Success,
             Content: stream,
             ContentType: GetContentType(file.Extension),
             DownloadName: downloadName + file.Extension);

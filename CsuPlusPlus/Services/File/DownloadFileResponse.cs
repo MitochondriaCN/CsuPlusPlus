@@ -1,13 +1,13 @@
 namespace CsuPlusPlus.Services.File;
 
 public record DownloadFileResponse(
-    DownloadFileResult Result,
+    DownloadFileStatus Status,
     Stream? Content = null,
     string? ContentType = null,
     string? DownloadName = null
 );
 
-public enum DownloadFileResult
+public enum DownloadFileStatus
 {
     Success,
     NotFound,
