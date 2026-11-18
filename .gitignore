@@ -68,3 +68,9 @@ logs/
 ._*
 Thumbs.db
 Desktop.ini
+
+# Local tool and agent runtime caches
+.local/
+.nuget/
+/Library/
+/skills/
