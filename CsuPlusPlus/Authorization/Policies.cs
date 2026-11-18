@@ -2,7 +2,11 @@ namespace CsuPlusPlus.Authorization;
 
 public static class Policies
 {
-    public const string ManageUniversity = "University.Manage";
+    public const string ManageAnyUniversity = "University.Manage";
+
+    public const string ManageOwnUniversity = "OwnUniversity.Manage";
+
+    public const string ManageAnyCourse = "Course.Manage";
 
     public const string ManageSettings = "Settings.Manage";
 

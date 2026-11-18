@@ -77,4 +77,43 @@ public class CourseController(ICourseService courseService, ICurrentUser current
             _ => throw new InvalidOperationException("未知结果。")
         };
     }
+
+    [Authorize(Policy = Policies.ManageOwnUniversity)]
+    [HttpPost("create")]
+    public async Task<ActionResult<CourseResponse>> Create(
+        [FromBody] CreateCourseRequest request, CancellationToken cancellationToken)
+    {
+        if (currentUser.UniversityId is not { } universityId)
+            return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
+
+        return MapCreateCourseResult(
+            await courseService.CreateAsync(universityId, request, cancellationToken));
+    }
+
+    [Authorize(Policy = Policies.ManageAnyCourse)]
+    [HttpPost("create/any")]
+    public async Task<ActionResult<CourseResponse>> CreateAny(
+        [FromQuery] long universityId,
+        [FromBody] CreateCourseRequest request,
+        CancellationToken cancellationToken)
+    {
+        return MapCreateCourseResult(
+            await courseService.CreateAsync(universityId, request, cancellationToken));
+    }
+
+    private ActionResult<CourseResponse> MapCreateCourseResult(CreateCourseResponse result) =>
+        result.Status switch
+        {
+            CreateCourseStatus.Success => Created(uri: null as Uri, value: result.Response),
+            CreateCourseStatus.UniversityNotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "大学不存在。"),
+            CreateCourseStatus.CollegeNotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "学院不存在。"),
+            CreateCourseStatus.CollegeInOtherUniversity => Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "学院不属于该大学。"),
+            _ => throw new InvalidOperationException("未知结果。")
+        };
 }

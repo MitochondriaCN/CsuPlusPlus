@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using CsuPlusPlus.Dtos.Common;
 using CsuPlusPlus.Dtos.Course;
 using CsuPlusPlus.Infra;
+using CsuPlusPlus.Models.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace CsuPlusPlus.Services.Course;
@@ -88,5 +89,44 @@ public class CourseService(AppDbContext db) : ICourseService
             .SingleAsync(cancellationToken);
 
         return new GetSingleCourseResponse(GetCourseResult.Success, course);
+    }
+
+    public async Task<CreateCourseResponse> CreateAsync(long universityId, CreateCourseRequest request,
+        CancellationToken cancellationToken)
+    {
+        var university = await db.Universities
+            .SingleOrDefaultAsync(u => u.Id == universityId, cancellationToken);
+        if (university is null)
+            return new CreateCourseResponse(CreateCourseStatus.UniversityNotFound);
+
+        Models.College? college = null;
+        if (request.CollegeId is { } collegeId)
+        {
+            college = await db.Colleges
+                .Include(c => c.University)
+                .SingleOrDefaultAsync(c => c.Id == collegeId, cancellationToken);
+            if (college is null)
+                return new CreateCourseResponse(CreateCourseStatus.CollegeNotFound);
+            if (college.University.Id != universityId)
+                return new CreateCourseResponse(CreateCourseStatus.CollegeInOtherUniversity);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var course = new Models.Course
+        {
+            Name = new NonEmptyName(request.Name),
+            University = university,
+            College = college,
+            Alias = string.IsNullOrWhiteSpace(request.Alias) ? null : new NonEmptyName(request.Alias),
+            Hours = request.Hours,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.Courses.Add(course);
+        await db.SaveChangesAsync(cancellationToken);
+
+        var created = await GetByIdAsync(course.Id, cancellationToken);
+        return new CreateCourseResponse(CreateCourseStatus.Success, created.Response);
     }
 }

@@ -104,7 +104,7 @@ public class Program
         // Policy
         builder.Services.AddAuthorization(options =>
         {
-            options.AddPolicy(Policies.ManageUniversity, policy =>
+            options.AddPolicy(Policies.ManageAnyUniversity, policy =>
                 policy.RequireRole(nameof(UserRole.Admin)));
             options.AddPolicy(Policies.ManageSettings, policy =>
                 policy.RequireRole(nameof(UserRole.Admin)));
@@ -115,6 +115,12 @@ public class Program
             options.AddPolicy(Policies.AccessOwnUniversity, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireClaim("university"));
+            options.AddPolicy(Policies.ManageOwnUniversity, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim("university")
+                .RequireRole(nameof(UserRole.Moderator)));
+            options.AddPolicy(Policies.ManageAnyCourse, policy =>
+                policy.RequireRole(nameof(UserRole.Admin)));
         });
 
         // Controllers
