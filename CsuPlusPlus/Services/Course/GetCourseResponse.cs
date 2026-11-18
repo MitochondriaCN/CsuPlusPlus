@@ -4,16 +4,16 @@ using CsuPlusPlus.Dtos.Course;
 namespace CsuPlusPlus.Services.Course;
 
 public record GetSingleCourseResponse(
-    GetCourseResult Result,
+    GetCourseStatus Status,
     CourseResponse? Response = null
 );
 
 public record GetCourseResponse(
-    GetCourseResult Result,
+    GetCourseStatus Status,
     PagedResponse<CourseResponse>? Response = null
 );
 
-public enum GetCourseResult
+public enum GetCourseStatus
 {
     Success,
     UniversityNotFound,

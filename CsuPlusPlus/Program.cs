@@ -104,17 +104,15 @@ public class Program
         // Policy
         builder.Services.AddAuthorization(options =>
         {
-            options.AddPolicy(Policies.ManageUniversity, policy =>
-                policy.RequireRole(nameof(UserRole.Admin)));
-            options.AddPolicy(Policies.ManageSettings, policy =>
-                policy.RequireRole(nameof(UserRole.Admin)));
-            options.AddPolicy(Policies.UploadGlobalFile, policy =>
-                policy.RequireRole(nameof(UserRole.Admin)));
-            options.AddPolicy(Policies.DownloadGlobalFile, policy =>
-                policy.RequireRole(nameof(UserRole.Admin)));
             options.AddPolicy(Policies.AccessOwnUniversity, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireClaim("university"));
+            options.AddPolicy(Policies.ManageOwnUniversity, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim("university")
+                .RequireRole(nameof(UserRole.Moderator), nameof(UserRole.Admin)));
+            options.AddPolicy(Policies.PlatformAdmin, policy => policy
+                .RequireRole(nameof(UserRole.Admin)));
         });
 
         // Controllers

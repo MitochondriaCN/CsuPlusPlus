@@ -1,4 +1,5 @@
 using CsuPlusPlus.Dtos.Common;
+using CsuPlusPlus.Dtos.Course;
 
 namespace CsuPlusPlus.Services.Course;
 
@@ -12,4 +13,7 @@ public interface ICourseService
 
     Task<GetSingleCourseResponse> GetByIdAsync(long id, CancellationToken cancellationToken,
         long? universityId = null);
+
+    Task<CreateCourseResponse> CreateAsync(long universityId, CreateCourseRequest request,
+        CancellationToken cancellationToken);
 }

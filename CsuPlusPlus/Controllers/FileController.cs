@@ -21,16 +21,16 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
         var response = await fileService.GetFileMetadataAsync(id, cancellationToken, universityId);
-        return response.Result switch
+        return response.Status switch
         {
-            GetFileMetadataResult.Success => Ok(response.Response),
-            GetFileMetadataResult.NotFound => Problem(statusCode: StatusCodes.Status404NotFound, title: "文件未找到。"),
-            GetFileMetadataResult.Forbidden => Problem(statusCode: StatusCodes.Status403Forbidden, title: "您无权限访问此文件。"),
+            GetFileMetadataStatus.Success => Ok(response.Response),
+            GetFileMetadataStatus.NotFound => Problem(statusCode: StatusCodes.Status404NotFound, title: "文件未找到。"),
+            GetFileMetadataStatus.Forbidden => Problem(statusCode: StatusCodes.Status403Forbidden, title: "您无权限访问此文件。"),
             _ => throw new InvalidOperationException("未知错误。")
         };
     }
 
-    [Authorize(Policy = Policies.UploadGlobalFile)]
+    [Authorize(Policy = Policies.PlatformAdmin)]
     [HttpPost("upload")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<FileMetadataResponse>> UploadFile(
@@ -98,57 +98,57 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
         var result = await fileService.BindCourseFileAsync(courseId, fileId, universityId, cancellationToken);
-        return result.Result switch
+        return result.Status switch
         {
-            BindCourseFileResult.Success => Ok(result.Response),
-            BindCourseFileResult.FileNotFound => Problem(statusCode: StatusCodes.Status404NotFound,
+            BindCourseFileStatus.Success => Ok(result.Response),
+            BindCourseFileStatus.FileNotFound => Problem(statusCode: StatusCodes.Status404NotFound,
                 title: "文件不存在。"),
-            BindCourseFileResult.CourseNotFound => Problem(statusCode: StatusCodes.Status404NotFound,
+            BindCourseFileStatus.CourseNotFound => Problem(statusCode: StatusCodes.Status404NotFound,
                 title: "课程不存在。"),
-            BindCourseFileResult.CourseInOtherUniversity => Problem(statusCode: StatusCodes.Status403Forbidden,
+            BindCourseFileStatus.CourseInOtherUniversity => Problem(statusCode: StatusCodes.Status403Forbidden,
                 title: "只能绑定本校课程。"),
-            BindCourseFileResult.Duplicate => Problem(statusCode: StatusCodes.Status409Conflict,
+            BindCourseFileStatus.Duplicate => Problem(statusCode: StatusCodes.Status409Conflict,
                 title: "文件已绑定到课程。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
     }
 
     private ActionResult MapCreateFileResult(CreateFileResponse result) =>
-        result.Result == CreateFileResult.Success
+        result.Status == CreateFileStatus.Success
             ? Created(uri: null as Uri, value: result.Response)
             : MapCreateFileFailure(result);
 
     private ActionResult MapCreateFileFailure(CreateFileResponse result)
     {
-        return result.Result switch
+        return result.Status switch
         {
-            CreateFileResult.TooLarge => Problem(
+            CreateFileStatus.TooLarge => Problem(
                 statusCode: StatusCodes.Status413PayloadTooLarge,
                 title: "文件超出大小限制。"),
-            CreateFileResult.FormatNotSupported => Problem(
+            CreateFileStatus.FormatNotSupported => Problem(
                 statusCode: StatusCodes.Status415UnsupportedMediaType,
                 title: "不支持的文件格式。"),
-            CreateFileResult.CourseNotFound => Problem(
+            CreateFileStatus.CourseNotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "课程不存在。"),
-            CreateFileResult.CourseInOtherUniversity => Problem(
+            CreateFileStatus.CourseInOtherUniversity => Problem(
                 statusCode: StatusCodes.Status403Forbidden,
                 title: "只能向本校课程上传文件。"),
-            CreateFileResult.Duplicate => Problem(
+            CreateFileStatus.Duplicate => Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "文件已存在。",
                 extensions: new Dictionary<string, object?> { ["existingFile"] = result.Response }),
-            CreateFileResult.DailyUploadLimitExceeded => Problem(
+            CreateFileStatus.DailyUploadLimitExceeded => Problem(
                 statusCode: StatusCodes.Status429TooManyRequests,
                 title: "今日上传次数已达上限。"),
-            CreateFileResult.UserNotFound => Problem(
+            CreateFileStatus.UserNotFound => Problem(
                 statusCode: StatusCodes.Status401Unauthorized,
                 title: "用户不存在。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
     }
 
-    [Authorize(Policy = Policies.DownloadGlobalFile)]
+    [Authorize(Policy = Policies.PlatformAdmin)]
     [EnableRateLimiting(RateLimitPolicies.FileDownload)]
     [HttpGet("download/{id:long}")]
     public async Task<IActionResult> DownloadFile(
@@ -172,19 +172,19 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
 
     private IActionResult MapDownloadResult(DownloadFileResponse result)
     {
-        return result.Result switch
+        return result.Status switch
         {
-            DownloadFileResult.Success => File(
+            DownloadFileStatus.Success => File(
                 result.Content!,
                 result.ContentType!,
                 result.DownloadName!),
-            DownloadFileResult.NotFound => Problem(
+            DownloadFileStatus.NotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "文件不存在。"),
-            DownloadFileResult.Forbidden => Problem(
+            DownloadFileStatus.Forbidden => Problem(
                 statusCode: StatusCodes.Status403Forbidden,
                 title: "只能下载本校资料。"),
-            DownloadFileResult.ContentMissing => Problem(
+            DownloadFileStatus.ContentMissing => Problem(
                 statusCode: StatusCodes.Status410Gone,
                 title: "文件内容已丢失。"),
             _ => throw new InvalidOperationException("未知结果。")

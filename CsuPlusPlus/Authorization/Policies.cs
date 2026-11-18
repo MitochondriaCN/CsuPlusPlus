@@ -2,13 +2,9 @@ namespace CsuPlusPlus.Authorization;
 
 public static class Policies
 {
-    public const string ManageUniversity = "University.Manage";
-
-    public const string ManageSettings = "Settings.Manage";
-
-    public const string UploadGlobalFile = "File.UploadGlobally";
-
-    public const string DownloadGlobalFile = "File.DownloadGlobally";
-
     public const string AccessOwnUniversity = "AccessOwnUniversity";
+
+    public const string ManageOwnUniversity = "ManageOwnUniversity";
+
+    public const string PlatformAdmin = "PlatformAdmin";
 }

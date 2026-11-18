@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using CsuPlusPlus.Dtos.Common;
 using CsuPlusPlus.Dtos.Course;
 using CsuPlusPlus.Infra;
+using CsuPlusPlus.Models.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace CsuPlusPlus.Services.Course;
@@ -25,7 +26,7 @@ public class CourseService(AppDbContext db) : ICourseService
         CancellationToken cancellationToken)
     {
         if (!await db.Universities.AnyAsync(u => u.Id == universityId, cancellationToken))
-            return new GetCourseResponse(GetCourseResult.UniversityNotFound);
+            return new GetCourseResponse(GetCourseStatus.UniversityNotFound);
 
         var query = db.Courses.AsNoTracking().Where(c => c.University.Id == universityId);
         var totalCount = await query.LongCountAsync(cancellationToken);
@@ -36,7 +37,7 @@ public class CourseService(AppDbContext db) : ICourseService
             .Select(ToResponse)
             .ToListAsync(cancellationToken);
 
-        return new GetCourseResponse(GetCourseResult.Success,
+        return new GetCourseResponse(GetCourseStatus.Success,
             new PagedResponse<CourseResponse>(items, request.Page, request.PageSize, totalCount));
     }
 
@@ -49,10 +50,10 @@ public class CourseService(AppDbContext db) : ICourseService
             .SingleOrDefaultAsync(cancellationToken);
 
         if (collegeUniversityId is null)
-            return new GetCourseResponse(GetCourseResult.CollegeNotFound);
+            return new GetCourseResponse(GetCourseStatus.CollegeNotFound);
 
         if (universityId is { } scope && collegeUniversityId != scope)
-            return new GetCourseResponse(GetCourseResult.CollegeInOtherUniversity);
+            return new GetCourseResponse(GetCourseStatus.CollegeInOtherUniversity);
 
         var query = db.Courses.AsNoTracking()
             .Where(c => c.College != null && c.College.Id == collegeId);
@@ -64,7 +65,7 @@ public class CourseService(AppDbContext db) : ICourseService
             .Select(ToResponse)
             .ToListAsync(cancellationToken);
 
-        return new GetCourseResponse(GetCourseResult.Success,
+        return new GetCourseResponse(GetCourseStatus.Success,
             new PagedResponse<CourseResponse>(items, request.Page, request.PageSize, totalCount));
     }
 
@@ -77,16 +78,55 @@ public class CourseService(AppDbContext db) : ICourseService
             .SingleOrDefaultAsync(cancellationToken);
 
         if (courseUniversityId is null)
-            return new GetSingleCourseResponse(GetCourseResult.CourseNotFound);
+            return new GetSingleCourseResponse(GetCourseStatus.CourseNotFound);
 
         if (universityId is { } scope && courseUniversityId != scope)
-            return new GetSingleCourseResponse(GetCourseResult.CourseInOtherUniversity);
+            return new GetSingleCourseResponse(GetCourseStatus.CourseInOtherUniversity);
 
         var course = await db.Courses.AsNoTracking()
             .Where(c => c.Id == id)
             .Select(ToResponse)
             .SingleAsync(cancellationToken);
 
-        return new GetSingleCourseResponse(GetCourseResult.Success, course);
+        return new GetSingleCourseResponse(GetCourseStatus.Success, course);
+    }
+
+    public async Task<CreateCourseResponse> CreateAsync(long universityId, CreateCourseRequest request,
+        CancellationToken cancellationToken)
+    {
+        var university = await db.Universities
+            .SingleOrDefaultAsync(u => u.Id == universityId, cancellationToken);
+        if (university is null)
+            return new CreateCourseResponse(CreateCourseStatus.UniversityNotFound);
+
+        Models.College? college = null;
+        if (request.CollegeId is { } collegeId)
+        {
+            college = await db.Colleges
+                .Include(c => c.University)
+                .SingleOrDefaultAsync(c => c.Id == collegeId, cancellationToken);
+            if (college is null)
+                return new CreateCourseResponse(CreateCourseStatus.CollegeNotFound);
+            if (college.University.Id != universityId)
+                return new CreateCourseResponse(CreateCourseStatus.CollegeInOtherUniversity);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var course = new Models.Course
+        {
+            Name = new NonEmptyName(request.Name),
+            University = university,
+            College = college,
+            Alias = string.IsNullOrWhiteSpace(request.Alias) ? null : new NonEmptyName(request.Alias),
+            Hours = request.Hours,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.Courses.Add(course);
+        await db.SaveChangesAsync(cancellationToken);
+
+        var created = await GetByIdAsync(course.Id, cancellationToken);
+        return new CreateCourseResponse(CreateCourseStatus.Success, created.Response);
     }
 }

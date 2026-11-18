@@ -3,10 +3,10 @@ using CsuPlusPlus.Dtos.File;
 namespace CsuPlusPlus.Services.File;
 
 public record BindCourseFileResponse(
-    BindCourseFileResult Result,
+    BindCourseFileStatus Status,
     CourseFileResponse? Response = null);
 
-public enum BindCourseFileResult
+public enum BindCourseFileStatus
 {
     Success,
     FileNotFound,

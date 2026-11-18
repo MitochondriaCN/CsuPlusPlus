@@ -11,7 +11,7 @@ namespace CsuPlusPlus.Controllers;
 [Route("college")]
 public class CollegeController(ICollegeService collegeService) : ControllerBase
 {
-    [Authorize(Policies.ManageUniversity)]
+    [Authorize(Policies.PlatformAdmin)]
     [HttpPost("create")]
     public async Task<ActionResult<CollegeResponse>> Create(
         [FromBody] CreateCollegeRequest request,
