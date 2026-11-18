@@ -13,6 +13,9 @@ dependencies:
   - $libs.androidx.lifecycle.viewmodel.compose
   - $libs.androidx.lifecycle.runtime.compose
   - $libs.material3.adaptive.navigation.suite
+  - $libs.material3.adaptive
+  - $libs.material3.adaptive.layout
+  - $libs.material3.adaptive.navigation
   - $libs.icons.lucide.cmp
   - $libs.koin.core
   - $libs.koin.compose
@@ -21,6 +24,7 @@ dependencies:
   - $ktor.client.contentNegotiation
   - $ktor.serialization.kotlinx.json
   - $ktor.client.logging
+  - $kotlin.serialization.json
   - io.ktor:ktor-client-engine-defaults
 
 dependencies@android:
@@ -28,9 +32,7 @@ dependencies@android:
 
 settings:
   kotlin:
-    serialization:
-      format: json
-      version: 1.11.0
+    serialization: enabled
   ktor:
     enabled: true
   compose:
