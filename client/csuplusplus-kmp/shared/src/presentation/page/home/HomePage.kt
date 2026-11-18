@@ -2,10 +2,6 @@ package ink.qingshuige.csuplusplus.presentation.page.home
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
@@ -22,6 +18,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.*
+import ink.qingshuige.csuplusplus.core.pagination.PagedState
+import ink.qingshuige.csuplusplus.presentation.component.PaginatedLazyColumn
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -37,7 +35,7 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
             verticalPartitionSpacerSize = 0.dp,
         )
 
-    val navigator = rememberListDetailPaneScaffoldNavigator<String>(
+    val navigator = rememberListDetailPaneScaffoldNavigator<Long>(
         scaffoldDirective = scaffoldDirective,
     )
     val scope = rememberCoroutineScope()
@@ -53,11 +51,12 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
         listPane = {
             AnimatedPane {
                 CourseListPane(
-                    courses = uiState.courses,
-                    isLoading = uiState.isLoadingCourses,
+                    coursesState = uiState.courses,
                     // 仅在双栏同时可见时高亮选中卡片
                     highlightedCourseId = if (isDualPane) uiState.selectedCourseId else null,
                     onRefresh = viewModel::refreshCourses,
+                    onLoadMore = viewModel::loadMoreCourses,
+                    onRetry = viewModel::retryCourses,
                     onCourseClick = { course ->
                         viewModel.selectCourse(course.id)
                         scope.launch {
@@ -71,11 +70,15 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
             AnimatedPane {
                 CourseDetailPane(
                     detailState = uiState.detailState,
+                    filesState = uiState.files,
                     showBackButton = !isDualPane,
                     snackbarHostState = snackbarHostState,
                     onBackClick = {
                         scope.launch { navigator.navigateBack() }
                     },
+                    onRetryDetail = viewModel::retryDetail,
+                    onLoadMoreFiles = viewModel::loadMoreFiles,
+                    onRetryFiles = viewModel::retryFiles,
                     onFileClick = { file ->
                         scope.launch {
                             snackbarHostState.showSnackbar("准备打开：${file.name}")
@@ -90,20 +93,27 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CourseListPane(
-    courses: List<CourseSummary>,
-    isLoading: Boolean,
-    highlightedCourseId: String?,
+    coursesState: PagedState<CourseSummary>,
+    highlightedCourseId: Long?,
     onRefresh: () -> Unit,
+    onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
     onCourseClick: (CourseSummary) -> Unit,
 ) {
+    val subtitle = when {
+        coursesState.isFirstLoading -> "加载课程中..."
+        coursesState.page > 0 -> "共 ${coursesState.totalCount} 门课程"
+        else -> "课程列表"
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text("我的课程", style = MaterialTheme.typography.titleLarge)
+                        Text("课程列表", style = MaterialTheme.typography.titleLarge)
                         Text(
-                            text = "${courses.size} 门在修课程",
+                            text = subtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -117,28 +127,29 @@ private fun CourseListPane(
             )
         },
     ) { innerPadding ->
-        Box(
+        PaginatedLazyColumn(
+            pagedState = coursesState,
+            onLoadMore = onLoadMore,
+            onRetry = onRetry,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-        ) {
-            if (isLoading && courses.isEmpty()) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(courses, key = { it.id }) { course ->
-                        CourseCard(
-                            course = course,
-                            isSelected = course.id == highlightedCourseId,
-                            onClick = { onCourseClick(course) },
-                        )
-                    }
-                }
-            }
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            itemKey = { it.id },
+            emptyContent = {
+                Text(
+                    text = "暂无课程",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+        ) { course ->
+            CourseCard(
+                course = course,
+                isSelected = course.id == highlightedCourseId,
+                onClick = { onCourseClick(course) },
+            )
         }
     }
 }
@@ -184,7 +195,7 @@ private fun CourseCard(
                     },
                 ) {
                     Text(
-                        text = course.code,
+                        text = course.collegeName ?: course.universityName,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isSelected) {
@@ -192,13 +203,18 @@ private fun CourseCard(
                         } else {
                             MaterialTheme.colorScheme.onSecondaryContainer
                         },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Text(
-                    text = "${course.credits} 学分",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+
+                course.hours?.let { hours ->
+                    Text(
+                        text = "$hours 学时",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             Text(
@@ -210,31 +226,27 @@ private fun CourseCard(
             )
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(
-                        imageVector = Lucide.User,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "${course.teacher} · ${course.term}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
+                Icon(
+                    imageVector = Lucide.BookOpen,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Text(
-                    text = "${course.fileCount} 份资料",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    text = buildString {
+                        append(course.universityName)
+                        if (!course.alias.isNullOrBlank()) {
+                            append(" · ")
+                            append(course.alias)
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -245,14 +257,19 @@ private fun CourseCard(
 @Composable
 private fun CourseDetailPane(
     detailState: CourseDetailUiState,
+    filesState: PagedState<CourseFile>,
     showBackButton: Boolean,
     snackbarHostState: SnackbarHostState,
     onBackClick: () -> Unit,
+    onRetryDetail: () -> Unit,
+    onLoadMoreFiles: () -> Unit,
+    onRetryFiles: () -> Unit,
     onFileClick: (CourseFile) -> Unit,
 ) {
     val title = when (detailState) {
-        is CourseDetailUiState.Success -> detailState.detail.summary.name
+        is CourseDetailUiState.Success -> detailState.course.name
         CourseDetailUiState.Loading -> "加载课程中..."
+        is CourseDetailUiState.Error -> "加载失败"
         CourseDetailUiState.Empty -> "课程详情"
     }
 
@@ -293,13 +310,34 @@ private fun CourseDetailPane(
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
 
+                is CourseDetailUiState.Error -> {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = detailState.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        FilledTonalButton(onClick = onRetryDetail) {
+                            Text("重试")
+                        }
+                    }
+                }
+
                 is CourseDetailUiState.Success -> {
-                    // 3. 限制超宽屏下的最大阅读宽度，避免内容被拉成横跨整个显示器的长行
                     CourseDetailContent(
-                        detail = detailState.detail,
+                        course = detailState.course,
+                        filesState = filesState,
                         modifier = Modifier
                             .widthIn(max = 760.dp)
                             .fillMaxSize(),
+                        onLoadMoreFiles = onLoadMoreFiles,
+                        onRetryFiles = onRetryFiles,
                         onFileClick = onFileClick,
                     )
                 }
@@ -334,7 +372,7 @@ private fun EmptyDetailPlaceholder(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            text = "这里将展示课程基本信息、上课地点与课件资料列表",
+            text = "这里将展示课程基本信息与课件资料列表",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -343,79 +381,90 @@ private fun EmptyDetailPlaceholder(modifier: Modifier = Modifier) {
 
 @Composable
 private fun CourseDetailContent(
-    detail: CourseDetail,
+    course: CourseSummary,
+    filesState: PagedState<CourseFile>,
     modifier: Modifier = Modifier,
+    onLoadMoreFiles: () -> Unit,
+    onRetryFiles: () -> Unit,
     onFileClick: (CourseFile) -> Unit,
 ) {
-    Column(
-        modifier = modifier
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        // 课程基本信息卡
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AssistChip(onClick = {}, label = { Text(detail.summary.code) })
-                    AssistChip(onClick = {}, label = { Text(detail.summary.term) })
-                    AssistChip(onClick = {}, label = { Text("${detail.summary.credits} 学分") })
+    val fileCountLabel = if (filesState.page > 0) " (${filesState.totalCount})" else ""
+
+    PaginatedLazyColumn(
+        pagedState = filesState,
+        onLoadMore = onLoadMoreFiles,
+        onRetry = onRetryFiles,
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        itemKey = { it.id },
+        headerContent = {
+            item(key = "__course_info_header__") {
+                Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ),
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AssistChip(onClick = {}, label = { Text(course.universityName) })
+                                course.collegeName?.let { college ->
+                                    AssistChip(onClick = {}, label = { Text(college) })
+                                }
+                                course.hours?.let { hours ->
+                                    AssistChip(onClick = {}, label = { Text("$hours 学时") })
+                                }
+                            }
+
+                            HorizontalDivider()
+
+                            if (!course.alias.isNullOrBlank()) {
+                                InfoRow(icon = Lucide.BookOpen, label = "课程别名", value = course.alias)
+                            }
+                            InfoRow(icon = Lucide.Clock, label = "最近更新", value = course.updatedAt)
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Lucide.FolderOpen,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = "课程资料$fileCountLabel",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
-
-                Text(
-                    text = detail.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-
-                HorizontalDivider()
-
-                InfoRow(icon = Lucide.User, label = "任课教师", value = detail.summary.teacher)
-                InfoRow(icon = Lucide.Clock, label = "上课时间", value = detail.schedule)
-                InfoRow(icon = Lucide.MapPin, label = "上课地点", value = detail.location)
             }
-        }
-
-        // 课件文件列表区
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    imageVector = Lucide.FolderOpen,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = "课程资料 (${detail.files.size})",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-
-            detail.files.forEach { file ->
-                CourseFileItem(
-                    file = file,
-                    onClick = { onFileClick(file) },
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
+        },
+        emptyContent = {
+            Text(
+                text = "该课程暂无资料",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    ) { file ->
+        CourseFileItem(
+            file = file,
+            onClick = { onFileClick(file) },
+        )
     }
 }
 
@@ -457,6 +506,12 @@ private fun CourseFileItem(
         CourseFileType.SLIDES -> Lucide.Presentation
         CourseFileType.ARCHIVE -> Lucide.FileArchive
         CourseFileType.CODE -> Lucide.FileCode
+        CourseFileType.OTHER -> Lucide.FileText
+    }
+    val typeLabel = if (file.type == CourseFileType.OTHER && file.extension.isNotBlank()) {
+        file.extension
+    } else {
+        file.type.label
     }
 
     Card(
@@ -499,7 +554,7 @@ private fun CourseFileItem(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "${file.type.label} · ${file.sizeText} · 更新于 ${file.updatedAt}",
+                    text = "$typeLabel · 上传者 ${file.uploaderName}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
