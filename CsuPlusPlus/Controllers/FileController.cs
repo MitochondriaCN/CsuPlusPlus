@@ -12,7 +12,7 @@ namespace CsuPlusPlus.Controllers;
 [Route("file")]
 public class FileController(IFileService fileService, ICurrentUser currentUser) : ControllerBase
 {
-    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
+    [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpGet]
     public async Task<ActionResult<FileMetadataResponse>> GetFileMetadata(
         long id, CancellationToken cancellationToken)
@@ -44,7 +44,7 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
             await fileService.CreateFileAsync(request, userId, cancellationToken));
     }
 
-    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
+    [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpPost("upload/course")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<FileMetadataResponse>> UploadCourseFile(
@@ -59,7 +59,7 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
                 cancellationToken));
     }
 
-    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
+    [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpGet("list/course")]
     public async Task<ActionResult<PagedResponse<FileMetadataResponse>>> ListCourseFiles(
         [FromQuery] long courseId,
@@ -72,7 +72,7 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
         return Ok(await fileService.GetFilesBy(universityId, courseId, request, cancellationToken));
     }
 
-    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
+    [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpGet("search/course")]
     public async Task<ActionResult<PagedResponse<FileMetadataResponse>>> SearchCourseFiles(
         [FromQuery] long courseId,
@@ -87,7 +87,7 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
             cancellationToken));
     }
 
-    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
+    [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpPost("bind/course")]
     public async Task<ActionResult<CourseFileResponse>> BindCourseFile(
         [FromQuery] long courseId,
@@ -156,7 +156,7 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
         CancellationToken cancellationToken) =>
         MapDownloadResult(await fileService.DownloadFileAsync(id, cancellationToken));
 
-    [Authorize(Policy = Policies.AccessOwnUniversityFiles)]
+    [Authorize(Policy = Policies.AccessOwnUniversity)]
     [EnableRateLimiting(RateLimitPolicies.FileDownload)]
     [HttpGet("download/course/{id:long}")]
     public async Task<IActionResult> DownloadCourseFile(

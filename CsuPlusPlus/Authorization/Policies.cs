@@ -10,5 +10,5 @@ public static class Policies
 
     public const string DownloadGlobalFile = "File.DownloadGlobally";
 
-    public const string AccessOwnUniversityFiles = "File.AccessOwnUniversity";
+    public const string AccessOwnUniversity = "AccessOwnUniversity";
 }
