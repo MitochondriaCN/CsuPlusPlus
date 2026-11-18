@@ -90,7 +90,7 @@ public class CourseController(ICourseService courseService, ICurrentUser current
             await courseService.CreateAsync(universityId, request, cancellationToken));
     }
 
-    [Authorize(Policy = Policies.ManageAnyCourse)]
+    [Authorize(Policy = Policies.PlatformAdmin)]
     [HttpPost("create/any")]
     public async Task<ActionResult<CourseResponse>> CreateAny(
         [FromQuery] long universityId,

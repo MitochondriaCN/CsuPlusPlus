@@ -30,7 +30,7 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
         };
     }
 
-    [Authorize(Policy = Policies.UploadGlobalFile)]
+    [Authorize(Policy = Policies.PlatformAdmin)]
     [HttpPost("upload")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<FileMetadataResponse>> UploadFile(
@@ -148,7 +148,7 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
         };
     }
 
-    [Authorize(Policy = Policies.DownloadGlobalFile)]
+    [Authorize(Policy = Policies.PlatformAdmin)]
     [EnableRateLimiting(RateLimitPolicies.FileDownload)]
     [HttpGet("download/{id:long}")]
     public async Task<IActionResult> DownloadFile(

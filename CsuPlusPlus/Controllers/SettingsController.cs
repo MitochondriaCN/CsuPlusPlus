@@ -12,7 +12,7 @@ namespace CsuPlusPlus.Controllers;
 [Route("settings")]
 public class SettingsController(ISettingsService settingsService) : ControllerBase
 {
-    [Authorize(Policies.ManageSettings)]
+    [Authorize(Policies.PlatformAdmin)]
     [HttpGet("{key}")]
     public async Task<ActionResult<SettingResponse>> Get(
         [FromRoute] SettingsKey key,
@@ -22,7 +22,7 @@ public class SettingsController(ISettingsService settingsService) : ControllerBa
         return Ok(new SettingResponse(key.ToString(), value));
     }
 
-    [Authorize(Policies.ManageSettings)]
+    [Authorize(Policies.PlatformAdmin)]
     [HttpPut("{key}")]
     public async Task<ActionResult<SettingResponse>> Set(
         [FromRoute] SettingsKey key,
