@@ -8,6 +8,7 @@ import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.adaptive.layout.*
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.*
+import ink.qingshuige.csuplusplus.core.file.rememberPlatformFileSaver
 import ink.qingshuige.csuplusplus.core.pagination.PagedState
 import ink.qingshuige.csuplusplus.presentation.component.PaginatedLazyColumn
 import kotlinx.coroutines.launch
@@ -40,6 +42,13 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
     )
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val fileSaver = rememberPlatformFileSaver()
+
+    LaunchedEffect(viewModel) {
+        viewModel.messages.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     val isDualPane =
         navigator.scaffoldValue[ListDetailPaneScaffoldRole.List] == PaneAdaptedValue.Expanded &&
@@ -71,6 +80,7 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
                 CourseDetailPane(
                     detailState = uiState.detailState,
                     filesState = uiState.files,
+                    downloadingFileIds = uiState.downloadingFileIds,
                     showBackButton = !isDualPane,
                     snackbarHostState = snackbarHostState,
                     onBackClick = {
@@ -80,9 +90,7 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
                     onLoadMoreFiles = viewModel::loadMoreFiles,
                     onRetryFiles = viewModel::retryFiles,
                     onFileClick = { file ->
-                        scope.launch {
-                            snackbarHostState.showSnackbar("准备打开：${file.name}")
-                        }
+                        viewModel.downloadFile(file, fileSaver)
                     },
                 )
             }
@@ -258,6 +266,7 @@ private fun CourseCard(
 private fun CourseDetailPane(
     detailState: CourseDetailUiState,
     filesState: PagedState<CourseFile>,
+    downloadingFileIds: Set<Long>,
     showBackButton: Boolean,
     snackbarHostState: SnackbarHostState,
     onBackClick: () -> Unit,
@@ -333,6 +342,7 @@ private fun CourseDetailPane(
                     CourseDetailContent(
                         course = detailState.course,
                         filesState = filesState,
+                        downloadingFileIds = downloadingFileIds,
                         modifier = Modifier
                             .widthIn(max = 760.dp)
                             .fillMaxSize(),
@@ -383,6 +393,7 @@ private fun EmptyDetailPlaceholder(modifier: Modifier = Modifier) {
 private fun CourseDetailContent(
     course: CourseSummary,
     filesState: PagedState<CourseFile>,
+    downloadingFileIds: Set<Long>,
     modifier: Modifier = Modifier,
     onLoadMoreFiles: () -> Unit,
     onRetryFiles: () -> Unit,
@@ -463,6 +474,7 @@ private fun CourseDetailContent(
     ) { file ->
         CourseFileItem(
             file = file,
+            isDownloading = file.id in downloadingFileIds,
             onClick = { onFileClick(file) },
         )
     }
@@ -499,6 +511,7 @@ private fun InfoRow(
 @Composable
 private fun CourseFileItem(
     file: CourseFile,
+    isDownloading: Boolean,
     onClick: () -> Unit,
 ) {
     val fileIcon = when (file.type) {
@@ -516,6 +529,7 @@ private fun CourseFileItem(
 
     Card(
         onClick = onClick,
+        enabled = !isDownloading,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         ),
@@ -560,12 +574,19 @@ private fun CourseFileItem(
                 )
             }
 
-            Icon(
-                imageVector = Lucide.Download,
-                contentDescription = "下载",
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (isDownloading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    imageVector = Lucide.Download,
+                    contentDescription = "下载",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

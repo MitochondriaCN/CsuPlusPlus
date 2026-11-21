@@ -25,6 +25,7 @@ import kotlin.coroutines.cancellation.CancellationException
 class ApiClient(
     @PublishedApi internal val httpClient: HttpClient,
     @PublishedApi internal val json: Json,
+    private val config: NetworkConfig = NetworkConfig(),
 ) {
     suspend inline fun <reified T> get(
         path: String,
@@ -76,6 +77,10 @@ class ApiClient(
         val response = httpClient.request {
             method = HttpMethod.Get
             url(normalizePath(path))
+            timeout {
+                requestTimeoutMillis = config.downloadRequestTimeoutMillis
+                socketTimeoutMillis = config.downloadSocketTimeoutMillis
+            }
             block()
         }
         if (!response.status.isSuccess()) {
@@ -85,8 +90,14 @@ class ApiClient(
         val contentDisposition = response.headers[HttpHeaders.ContentDisposition]
             ?.let { runCatching { ContentDisposition.parse(it) }.getOrNull() }
         val fileName = contentDisposition?.parameter(ContentDisposition.Parameters.FileNameAsterisk)
-            ?.removePrefix("UTF-8''")
+            ?.let { raw ->
+                val encoded = if ("''" in raw) raw.substringAfter("''") else raw
+                runCatching { encoded.decodeURLQueryComponent(plusIsSpace = false) }.getOrDefault(encoded)
+            }
+            ?.takeIf { it.isNotBlank() }
             ?: contentDisposition?.parameter(ContentDisposition.Parameters.FileName)
+                ?.trim('"')
+                ?.takeIf { it.isNotBlank() }
         DownloadedFile(
             bytes = bytes,
             fileName = fileName,

@@ -8,6 +8,8 @@ data class NetworkConfig(
     val connectTimeoutMillis: Long = 10_000L,
     val requestTimeoutMillis: Long = 30_000L,
     val socketTimeoutMillis: Long = 30_000L,
+    val downloadRequestTimeoutMillis: Long = 5 * 60_000L,
+    val downloadSocketTimeoutMillis: Long = 60_000L,
     val isDebugLogging: Boolean = true,
 ) {
     val normalizedBaseUrl: String

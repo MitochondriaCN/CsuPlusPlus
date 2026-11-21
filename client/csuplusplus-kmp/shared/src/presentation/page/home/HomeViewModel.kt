@@ -2,6 +2,8 @@ package ink.qingshuige.csuplusplus.presentation.page.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import ink.qingshuige.csuplusplus.core.file.FileSaveResult
+import ink.qingshuige.csuplusplus.core.file.PlatformFileSaver
 import ink.qingshuige.csuplusplus.core.network.userMessage
 import ink.qingshuige.csuplusplus.core.pagination.PagedState
 import ink.qingshuige.csuplusplus.core.pagination.Paginator
@@ -12,9 +14,11 @@ import ink.qingshuige.csuplusplus.data.dto.CourseResponse
 import ink.qingshuige.csuplusplus.data.dto.FileMetadataResponse
 import ink.qingshuige.csuplusplus.data.dto.PagedResponse
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -56,6 +60,7 @@ data class HomeUiState(
     val selectedCourseId: Long? = null,
     val detailState: CourseDetailUiState = CourseDetailUiState.Empty,
     val files: PagedState<CourseFile> = PagedState(),
+    val downloadingFileIds: Set<Long> = emptySet(),
 )
 
 class HomeViewModel(
@@ -65,6 +70,9 @@ class HomeViewModel(
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    private val _messages = Channel<String>(Channel.BUFFERED)
+    val messages = _messages.receiveAsFlow()
 
     private var detailJob: Job? = null
     private var activeDetailCourseId: Long? = null
@@ -192,6 +200,28 @@ class HomeViewModel(
                     }
                 },
             )
+        }
+    }
+
+    fun downloadFile(file: CourseFile, fileSaver: PlatformFileSaver) {
+        if (file.id in _uiState.value.downloadingFileIds) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(downloadingFileIds = it.downloadingFileIds + file.id) }
+            try {
+                val result = fileSaver.saveWithPicker(
+                    suggestedName = file.name,
+                    extension = file.extension,
+                    fetchFile = { fileApi.downloadCourseFile(file.id) },
+                )
+                when (result) {
+                    is FileSaveResult.Success -> _messages.send(result.message)
+                    is FileSaveResult.Failure -> _messages.send(result.message)
+                    FileSaveResult.Cancelled -> Unit
+                }
+            } finally {
+                _uiState.update { it.copy(downloadingFileIds = it.downloadingFileIds - file.id) }
+            }
         }
     }
 }
