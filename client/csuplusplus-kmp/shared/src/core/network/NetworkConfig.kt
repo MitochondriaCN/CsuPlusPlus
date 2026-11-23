@@ -1,7 +1,7 @@
 package ink.qingshuige.csuplusplus.core.network
 
 /**
- * 网络层基础配置。
+ * 网络层基础配置
  */
 data class NetworkConfig(
     val baseUrl: String = DEFAULT_BASE_URL,

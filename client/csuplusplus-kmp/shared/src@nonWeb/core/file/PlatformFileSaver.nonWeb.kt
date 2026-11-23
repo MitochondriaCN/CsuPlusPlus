@@ -12,6 +12,9 @@ import io.github.vinceglb.filekit.write
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 private class PendingSaveHolder {
@@ -72,6 +75,7 @@ actual fun rememberPlatformFileSaver(): PlatformFileSaver {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
+                    currentCoroutineContext().ensureActive()
                     FileSaveResult.Failure("保存失败：${e.message ?: "未知错误"}")
                 }
             }

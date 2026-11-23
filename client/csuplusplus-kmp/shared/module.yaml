@@ -2,6 +2,9 @@ product:
   type: kmp/lib
   platforms: [ jvm, android, iosArm64, iosSimulatorArm64, wasmJs ]
 
+aliases:
+  - nonWeb: [ jvm, android, iosArm64, iosSimulatorArm64 ]
+
 dependencies:
   - $compose.runtime
   - $compose.foundation

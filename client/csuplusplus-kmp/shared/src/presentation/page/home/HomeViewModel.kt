@@ -87,6 +87,7 @@ class HomeViewModel(
                 resp.mapItems(CourseResponse::toSummary)
             }
         },
+        getKey = { it.id.toString() },
     )
 
     private val filePaginator = Paginator(
@@ -108,6 +109,7 @@ class HomeViewModel(
                 resp.mapItems(FileMetadataResponse::toCourseFile)
             }
         },
+        getKey = { it.id.toString() },
     )
 
     init {

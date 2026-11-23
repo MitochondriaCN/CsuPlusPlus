@@ -60,7 +60,7 @@ class ApiClient(
         path: String,
         noinline queryAndHeaders: HttpRequestBuilder.() -> Unit = {},
         noinline formBuilder: FormBuilder.() -> Unit,
-    ): Result<T> = safeCall {
+    ): Result<T> = safeNetworkCall {
         val response = httpClient.request {
             method = HttpMethod.Post
             url(normalizePath(path))
@@ -73,7 +73,7 @@ class ApiClient(
     suspend fun downloadFile(
         path: String,
         block: HttpRequestBuilder.() -> Unit = {},
-    ): Result<DownloadedFile> = safeCall {
+    ): Result<DownloadedFile> = safeNetworkCall {
         val response = httpClient.request {
             method = HttpMethod.Get
             url(normalizePath(path))
@@ -111,7 +111,7 @@ class ApiClient(
         path: String,
         body: Any?,
         noinline block: HttpRequestBuilder.() -> Unit,
-    ): Result<T> = safeCall {
+    ): Result<T> = safeNetworkCall {
         val response = httpClient.request {
             method = httpMethod
             url(normalizePath(path))
@@ -137,8 +137,11 @@ class ApiClient(
         return response.body<T>()
     }
 
+    /**
+     * 安全执行（网络请求的）代码，并映射错误类型。用于在整个网络请求过程中捕获异常。
+     */
     @PublishedApi
-    internal suspend inline fun <T> safeCall(block: () -> T): Result<T> {
+    internal inline fun <T> safeNetworkCall(block: () -> T): Result<T> {
         return try {
             Result.success(block())
         } catch (e: CancellationException) {
@@ -158,6 +161,9 @@ class ApiClient(
         }
     }
 
+    /**
+     * 利用 [HttpResponse] 中的 [ProblemDetails] 构建 [ApiException]
+     */
     @PublishedApi
     internal suspend fun buildHttpException(response: HttpResponse): ApiException {
         val rawBody = runCatching { response.bodyAsText() }.onFailure {
