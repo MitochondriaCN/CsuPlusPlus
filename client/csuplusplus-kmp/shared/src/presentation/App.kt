@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
@@ -27,6 +26,7 @@ import ink.qingshuige.csuplusplus.di.appModule
 import ink.qingshuige.csuplusplus.presentation.page.auth.AuthPage
 import ink.qingshuige.csuplusplus.presentation.page.home.HomePage
 import ink.qingshuige.csuplusplus.presentation.page.me.MePage
+import ink.qingshuige.csuplusplus.presentation.theme.CsuPlusPlusTheme
 import org.jetbrains.compose.reload.DevelopmentEntryPoint
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
@@ -62,7 +62,7 @@ private fun AppContent(
         }
     }
 
-    MaterialTheme {
+    CsuPlusPlusTheme {
         if (!isReady) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()

@@ -37,4 +37,7 @@ public interface IFileService
 
     Task<PagedResponse<CourseResponse>> GetCoursesBy(long fileId, PageRequest pageRequest,
         CancellationToken cancellationToken);
+
+    Task<DeleteFileResponse> DeleteFileAsync(long id, CancellationToken cancellationToken,
+        long? uploaderUserId = null);
 }

@@ -156,6 +156,48 @@ public class FileService(
             TotalCount: totalCount);
     }
 
+    public async Task<DeleteFileResponse> DeleteFileAsync(long id, CancellationToken cancellationToken,
+        long? uploaderUserId = null)
+    {
+        var file = await db.Files
+            .Include(f => f.Uploader)
+            .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
+        if (file == null)
+            return new DeleteFileResponse(DeleteFileStatus.NotFound);
+
+        if (uploaderUserId is { } requiredUploader && file.Uploader.Id != requiredUploader)
+            return new DeleteFileResponse(DeleteFileStatus.Forbidden);
+
+        var universitiesWithEmblem = await db.Universities
+            .Where(u => u.Emblem != null && u.Emblem.Id == id)
+            .ToListAsync(cancellationToken);
+        foreach (var u in universitiesWithEmblem)
+            u.Emblem = null;
+
+        var courseFiles = await db.CourseFiles
+            .Where(cf => cf.FileId == id)
+            .ToListAsync(cancellationToken);
+        db.CourseFiles.RemoveRange(courseFiles);
+
+        db.Files.Remove(file);
+        await db.SaveChangesAsync(cancellationToken);
+
+        var path = Path.Combine(fileStorageOptions.Value.RootPath,
+            file.GuidFilename.ToString("N") + file.Extension);
+        if (System.IO.File.Exists(path))
+        {
+            try
+            {
+                System.IO.File.Delete(path);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        return new DeleteFileResponse(DeleteFileStatus.Success);
+    }
+
     private async Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
         Models.Course? course, CancellationToken cancellationToken)
     {

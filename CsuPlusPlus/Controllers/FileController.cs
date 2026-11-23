@@ -190,4 +190,37 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
             _ => throw new InvalidOperationException("未知结果。")
         };
     }
+
+    [Authorize]
+    [HttpDelete("{id:long}")]
+    public async Task<IActionResult> DeleteFile(
+        [FromRoute] long id,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UserId is not { } userId)
+            return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
+
+        return MapDeleteResult(
+            await fileService.DeleteFileAsync(id, cancellationToken, userId));
+    }
+
+    [Authorize(Policy = Policies.PlatformAdmin)]
+    [HttpDelete("any/{id:long}")]
+    public async Task<IActionResult> DeleteAnyFile(
+        [FromRoute] long id,
+        CancellationToken cancellationToken) =>
+        MapDeleteResult(await fileService.DeleteFileAsync(id, cancellationToken));
+
+    private IActionResult MapDeleteResult(DeleteFileResponse result) =>
+        result.Status switch
+        {
+            DeleteFileStatus.Success => Ok(),
+            DeleteFileStatus.NotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "文件不存在。"),
+            DeleteFileStatus.Forbidden => Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "只能删除自己上传的文件。"),
+            _ => throw new InvalidOperationException("未知结果。")
+        };
 }
