@@ -5,7 +5,7 @@ import ink.qingshuige.csuplusplus.data.dto.*
 import io.ktor.client.request.*
 
 /**
- * 课程接口，对应后端 `CourseController`。
+ * 课程接口
  */
 class CourseApi(private val api: ApiClient) {
 

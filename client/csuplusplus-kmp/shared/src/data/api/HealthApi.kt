@@ -4,7 +4,7 @@ import ink.qingshuige.csuplusplus.core.network.ApiClient
 import ink.qingshuige.csuplusplus.data.dto.HealthCheckResponse
 
 /**
- * 健康检查接口，对应后端 `HealthController`。
+ * 健康检查接口
  */
 class HealthApi(private val api: ApiClient) {
 

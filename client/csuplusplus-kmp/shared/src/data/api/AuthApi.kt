@@ -7,7 +7,7 @@ import ink.qingshuige.csuplusplus.data.dto.RegisterRequest
 import ink.qingshuige.csuplusplus.data.dto.UserProfileDto
 
 /**
- * 认证与当前用户资料接口，对应后端 `AuthController` 与 `UserProfileController`。
+ * 认证与当前用户资料接口
  */
 class AuthApi(private val api: ApiClient) {
 

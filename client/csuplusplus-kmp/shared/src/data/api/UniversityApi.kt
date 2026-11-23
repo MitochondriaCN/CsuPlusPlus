@@ -4,7 +4,7 @@ import ink.qingshuige.csuplusplus.core.network.ApiClient
 import ink.qingshuige.csuplusplus.data.dto.*
 
 /**
- * 大学接口，对应后端 `UniversityController`。
+ * 大学接口
  */
 class UniversityApi(private val api: ApiClient) {
 

@@ -6,7 +6,7 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 
 /**
- * 文件与课程资料接口，对应后端 `FileController`。
+ * 文件与课程资料接口
  */
 class FileApi(private val api: ApiClient) {
 
