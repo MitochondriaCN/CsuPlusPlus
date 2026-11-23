@@ -2,6 +2,7 @@ package ink.qingshuige.csuplusplus.presentation.page.home
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
@@ -16,8 +17,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.*
@@ -126,6 +134,7 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CourseListPane(
     coursesState: PagedState<CourseSummary>,
@@ -135,21 +144,26 @@ private fun CourseListPane(
     onRetry: () -> Unit,
     onCourseClick: (CourseSummary) -> Unit,
 ) {
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val subtitle = when {
         coursesState.isFirstLoading -> "加载课程中..."
         coursesState.page > 0 -> "共 ${coursesState.totalCount} 门课程"
-        else -> "课程列表"
+        else -> "发现与浏览课程资料"
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("课程列表", style = MaterialTheme.typography.titleLarge)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "课程列表",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
                         Text(
                             text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -159,6 +173,7 @@ private fun CourseListPane(
                         Icon(Lucide.RefreshCw, contentDescription = "刷新课程")
                     }
                 },
+                scrollBehavior = scrollBehavior,
             )
         },
     ) { innerPadding ->
@@ -189,6 +204,7 @@ private fun CourseListPane(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CourseCard(
     course: CourseSummary,
@@ -196,94 +212,168 @@ private fun CourseCard(
     onClick: () -> Unit,
 ) {
     val containerColor = if (isSelected) {
-        MaterialTheme.colorScheme.primaryContainer
+        MaterialTheme.colorScheme.secondaryContainer
     } else {
-        MaterialTheme.colorScheme.surfaceContainerLow
+        MaterialTheme.colorScheme.surfaceContainer
     }
-    val border = if (isSelected) {
-        BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+    val titleColor = if (isSelected) {
+        MaterialTheme.colorScheme.onSecondaryContainer
     } else {
-        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        MaterialTheme.colorScheme.onSurface
+    }
+    val secondaryTextColor = if (isSelected) {
+        MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val pillContainerColor = if (isSelected) {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val pillContentColor = if (isSelected) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        border = border,
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    },
-                ) {
-                    Text(
-                        text = course.collegeName ?: course.universityName,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                course.hours?.let { hours ->
-                    Text(
-                        text = "$hours 学时",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            Text(
-                text = course.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            CourseTitleText(
+                name = course.name,
+                alias = course.alias,
+                titleStyle = MaterialTheme.typography.titleLarge,
+                aliasStyle = MaterialTheme.typography.bodySmall,
+                titleColor = titleColor,
+                aliasColor = secondaryTextColor,
+                maxLines = 2,
             )
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Icon(
-                    imageVector = Lucide.BookOpen,
+                    imageVector = Lucide.GraduationCap,
                     contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(15.dp),
+                    tint = secondaryTextColor,
                 )
                 Text(
-                    text = buildString {
-                        append(course.universityName)
-                        if (!course.alias.isNullOrBlank()) {
-                            append(" · ")
-                            append(course.alias)
-                        }
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = course.universityName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = secondaryTextColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+
+            if (!course.collegeName.isNullOrBlank() || course.hours != null) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    course.collegeName?.takeIf { it.isNotBlank() }?.let { college ->
+                        MetadataPill(
+                            text = college,
+                            containerColor = pillContainerColor,
+                            contentColor = pillContentColor,
+                        )
+                    }
+                    course.hours?.let { hours ->
+                        MetadataPill(
+                            text = "$hours 学时",
+                            icon = Lucide.Clock,
+                            containerColor = pillContainerColor,
+                            contentColor = pillContentColor,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CourseTitleText(
+    name: String,
+    alias: String?,
+    titleStyle: TextStyle,
+    aliasStyle: TextStyle,
+    titleColor: Color,
+    aliasColor: Color,
+    maxLines: Int,
+    modifier: Modifier = Modifier,
+) {
+    val annotatedTitle = buildAnnotatedString {
+        withStyle(
+            titleStyle.toSpanStyle().copy(
+                fontWeight = FontWeight.SemiBold,
+                color = titleColor,
+            ),
+        ) {
+            append(name)
+        }
+        if (!alias.isNullOrBlank()) {
+            append("  ")
+            withStyle(
+                aliasStyle.toSpanStyle().copy(
+                    fontWeight = FontWeight.Normal,
+                    color = aliasColor,
+                ),
+            ) {
+                append(alias)
+            }
+        }
+    }
+
+    Text(
+        text = annotatedTitle,
+        modifier = modifier,
+        style = titleStyle,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun MetadataPill(
+    text: String,
+    containerColor: Color,
+    contentColor: Color,
+    icon: ImageVector? = null,
+) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = containerColor,
+        contentColor = contentColor,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -304,6 +394,7 @@ private fun CourseDetailPane(
     onRetryFiles: () -> Unit,
     onFileClick: (CourseFile) -> Unit,
 ) {
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val title = when (detailState) {
         is CourseDetailUiState.Success -> detailState.course.name
         CourseDetailUiState.Loading -> "加载课程中..."
@@ -312,12 +403,14 @@ private fun CourseDetailPane(
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = title,
+                        style = MaterialTheme.typography.titleLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -330,17 +423,33 @@ private fun CourseDetailPane(
                         }
                     }
                 },
-                actions = {
-                    if (detailState is CourseDetailUiState.Success) {
-                        IconButton(
-                            onClick = onUploadClick,
-                            enabled = !isUploadingFile,
-                        ) {
-                            Icon(Lucide.Upload, contentDescription = "上传文件")
-                        }
-                    }
-                },
+                scrollBehavior = scrollBehavior,
             )
+        },
+        floatingActionButton = {
+            if (detailState is CourseDetailUiState.Success) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        if (!isUploadingFile) {
+                            onUploadClick()
+                        }
+                    },
+                    icon = {
+                        if (isUploadingFile) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = LocalContentColor.current,
+                            )
+                        } else {
+                            Icon(Lucide.Upload, contentDescription = null)
+                        }
+                    },
+                    text = {
+                        Text(if (isUploadingFile) "上传中..." else "上传资料")
+                    },
+                )
+            }
         },
     ) { innerPadding ->
         Box(
@@ -419,15 +528,18 @@ private fun EmptyDetailPlaceholder(modifier: Modifier = Modifier) {
         Text(
             text = "从左侧选择一门课程",
             style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
         )
         Text(
             text = "这里将展示课程基本信息与课件资料列表",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CourseDetailContent(
     course: CourseSummary,
@@ -438,48 +550,70 @@ private fun CourseDetailContent(
     onRetryFiles: () -> Unit,
     onFileClick: (CourseFile) -> Unit,
 ) {
-    val fileCountLabel = if (filesState.page > 0) " (${filesState.totalCount})" else ""
-
     PaginatedLazyColumn(
         pagedState = filesState,
         onLoadMore = onLoadMoreFiles,
         onRetry = onRetryFiles,
         modifier = modifier,
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         itemKey = { it.id },
         headerContent = {
             item(key = "__course_info_header__") {
                 Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     Card(
+                        shape = MaterialTheme.shapes.large,
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
                         ),
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
-                            Row(
+                            CourseTitleText(
+                                name = course.name,
+                                alias = course.alias,
+                                titleStyle = MaterialTheme.typography.headlineSmall,
+                                aliasStyle = MaterialTheme.typography.bodyMedium,
+                                titleColor = MaterialTheme.colorScheme.onSurface,
+                                aliasColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 3,
+                            )
+
+                            FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                AssistChip(onClick = {}, label = { Text(course.universityName) })
-                                course.collegeName?.let { college ->
-                                    AssistChip(onClick = {}, label = { Text(college) })
+                                MetadataPill(
+                                    text = course.universityName,
+                                    icon = Lucide.GraduationCap,
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                                course.collegeName?.takeIf { it.isNotBlank() }?.let { college ->
+                                    MetadataPill(
+                                        text = college,
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                                 course.hours?.let { hours ->
-                                    AssistChip(onClick = {}, label = { Text("$hours 学时") })
+                                    MetadataPill(
+                                        text = "$hours 学时",
+                                        icon = Lucide.Clock,
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                             }
 
-                            HorizontalDivider()
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            )
 
-                            if (!course.alias.isNullOrBlank()) {
-                                InfoRow(icon = Lucide.BookOpen, label = "课程别名", value = course.alias)
-                            }
                             InfoRow(icon = Lucide.Clock, label = "最近更新", value = course.updatedAt)
                         }
                     }
@@ -495,10 +629,23 @@ private fun CourseDetailContent(
                             tint = MaterialTheme.colorScheme.primary,
                         )
                         Text(
-                            text = "课程资料$fileCountLabel",
+                            text = "课程资料",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
+                        if (filesState.page > 0) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                            ) {
+                                Text(
+                                    text = filesState.totalCount.toString(),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -521,7 +668,7 @@ private fun CourseDetailContent(
 
 @Composable
 private fun InfoRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     value: String,
 ) {
@@ -565,14 +712,24 @@ private fun CourseFileItem(
     } else {
         file.type.label
     }
+    val iconContainerColor = when (file.type) {
+        CourseFileType.PDF, CourseFileType.SLIDES -> MaterialTheme.colorScheme.primaryContainer
+        CourseFileType.CODE -> MaterialTheme.colorScheme.tertiaryContainer
+        CourseFileType.ARCHIVE, CourseFileType.OTHER -> MaterialTheme.colorScheme.secondaryContainer
+    }
+    val iconContentColor = when (file.type) {
+        CourseFileType.PDF, CourseFileType.SLIDES -> MaterialTheme.colorScheme.onPrimaryContainer
+        CourseFileType.CODE -> MaterialTheme.colorScheme.onTertiaryContainer
+        CourseFileType.ARCHIVE, CourseFileType.OTHER -> MaterialTheme.colorScheme.onSecondaryContainer
+    }
 
     Card(
         onClick = onClick,
         enabled = !isDownloading,
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
     ) {
         Row(
             modifier = Modifier
@@ -582,15 +739,15 @@ private fun CourseFileItem(
         ) {
             Surface(
                 shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(40.dp),
+                color = iconContainerColor,
+                modifier = Modifier.size(44.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = fileIcon,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        tint = iconContentColor,
                     )
                 }
             }
@@ -600,7 +757,7 @@ private fun CourseFileItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = file.name,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -610,8 +767,12 @@ private fun CourseFileItem(
                     text = "$typeLabel · 上传者 ${file.uploaderName}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
+
+            Spacer(modifier = Modifier.width(12.dp))
 
             if (isDownloading) {
                 CircularProgressIndicator(

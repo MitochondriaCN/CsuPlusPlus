@@ -8,6 +8,7 @@ import ink.qingshuige.csuplusplus.core.network.userMessage
 import ink.qingshuige.csuplusplus.core.pagination.PagedState
 import ink.qingshuige.csuplusplus.core.pagination.Paginator
 import ink.qingshuige.csuplusplus.core.pagination.mapItems
+import ink.qingshuige.csuplusplus.core.time.formatFriendlyTime
 import ink.qingshuige.csuplusplus.data.api.CourseApi
 import ink.qingshuige.csuplusplus.data.api.FileApi
 import ink.qingshuige.csuplusplus.data.dto.CourseResponse
@@ -336,7 +337,7 @@ private fun CourseResponse.toSummary(): CourseSummary = CourseSummary(
     collegeName = collegeName,
     alias = alias,
     hours = hours,
-    updatedAt = updatedAt,
+    updatedAt = formatFriendlyTime(updatedAt),
 )
 
 private fun FileMetadataResponse.toCourseFile(): CourseFile {
