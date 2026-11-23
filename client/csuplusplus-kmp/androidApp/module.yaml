@@ -11,3 +11,11 @@ settings:
   android:
     namespace: ink.qingshuige.csuplusplus
     applicationId: ink.qingshuige.csuplusplus
+    compileSdk: 37
+    targetSdk: 35
+    minSdk: 24
+    versionCode: 1
+    versionName: "0.1.0"
+    signing:
+      enabled: true
+      propertiesFile: ./keystore.properties
