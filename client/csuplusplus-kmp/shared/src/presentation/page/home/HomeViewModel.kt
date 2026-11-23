@@ -13,6 +13,7 @@ import ink.qingshuige.csuplusplus.data.api.FileApi
 import ink.qingshuige.csuplusplus.data.dto.CourseResponse
 import ink.qingshuige.csuplusplus.data.dto.FileMetadataResponse
 import ink.qingshuige.csuplusplus.data.dto.PagedResponse
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,12 +56,19 @@ sealed interface CourseDetailUiState {
     data class Success(val course: CourseSummary) : CourseDetailUiState
 }
 
+data class CourseFileUploadUiState(
+    val isDialogVisible: Boolean = false,
+    val isUploading: Boolean = false,
+    val errorMessage: String? = null,
+)
+
 data class HomeUiState(
     val courses: PagedState<CourseSummary> = PagedState(),
     val selectedCourseId: Long? = null,
     val detailState: CourseDetailUiState = CourseDetailUiState.Empty,
     val files: PagedState<CourseFile> = PagedState(),
     val downloadingFileIds: Set<Long> = emptySet(),
+    val uploadState: CourseFileUploadUiState = CourseFileUploadUiState(),
 )
 
 class HomeViewModel(
@@ -224,6 +232,99 @@ class HomeViewModel(
             } finally {
                 _uiState.update { it.copy(downloadingFileIds = it.downloadingFileIds - file.id) }
             }
+        }
+    }
+
+    fun openUploadDialog() {
+        if (activeDetailCourseId == null) return
+        _uiState.update {
+            it.copy(
+                uploadState = it.uploadState.copy(
+                    isDialogVisible = true,
+                    errorMessage = null,
+                ),
+            )
+        }
+    }
+
+    fun dismissUploadDialog() {
+        if (_uiState.value.uploadState.isUploading) return
+        _uiState.update {
+            it.copy(uploadState = CourseFileUploadUiState())
+        }
+    }
+
+    fun clearUploadError() {
+        if (_uiState.value.uploadState.errorMessage == null) return
+        _uiState.update {
+            it.copy(uploadState = it.uploadState.copy(errorMessage = null))
+        }
+    }
+
+    fun uploadCourseFile(
+        fileName: String,
+        contentType: String?,
+        friendlyName: String?,
+        readBytes: suspend () -> ByteArray,
+    ) {
+        val courseId = activeDetailCourseId ?: return
+        if (_uiState.value.uploadState.isUploading) return
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    uploadState = it.uploadState.copy(
+                        isUploading = true,
+                        errorMessage = null,
+                    ),
+                )
+            }
+
+            val bytes = try {
+                readBytes()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        uploadState = it.uploadState.copy(
+                            isUploading = false,
+                            errorMessage = "读取文件失败：${e.message ?: "未知错误"}",
+                        ),
+                    )
+                }
+                return@launch
+            }
+
+            val normalizedFriendlyName = friendlyName?.trim()?.takeIf { it.isNotBlank() }
+            fileApi.uploadCourseFile(
+                courseId = courseId,
+                fileName = fileName,
+                fileBytes = bytes,
+                friendlyFilename = normalizedFriendlyName,
+                contentType = contentType,
+            ).fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(uploadState = CourseFileUploadUiState())
+                    }
+                    if (activeDetailCourseId == courseId) {
+                        filePaginator.refresh()
+                    }
+                    _messages.send("上传成功")
+                },
+                onFailure = { error ->
+                    if (error is CancellationException) throw error
+                    _uiState.update {
+                        it.copy(
+                            uploadState = it.uploadState.copy(
+                                isUploading = false,
+                                errorMessage = error.userMessage,
+                            ),
+                        )
+                    }
+                },
+            )
         }
     }
 }
