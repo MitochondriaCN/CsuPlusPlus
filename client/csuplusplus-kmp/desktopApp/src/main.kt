@@ -5,7 +5,7 @@ import androidx.compose.ui.window.application
 import ink.qingshuige.csuplusplus.presentation.App
 
 fun main() = application {
-    Window(onCloseRequest = ::exitApplication, title = "csuplusplus-kmp") {
+    Window(onCloseRequest = ::exitApplication, title = "CSU++") {
         App()
     }
 }
