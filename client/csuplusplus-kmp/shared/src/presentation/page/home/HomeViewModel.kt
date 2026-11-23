@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ink.qingshuige.csuplusplus.core.file.FileSaveResult
 import ink.qingshuige.csuplusplus.core.file.PlatformFileSaver
+import ink.qingshuige.csuplusplus.core.network.TokenProvider
 import ink.qingshuige.csuplusplus.core.network.userMessage
 import ink.qingshuige.csuplusplus.core.pagination.PagedState
 import ink.qingshuige.csuplusplus.core.pagination.Paginator
 import ink.qingshuige.csuplusplus.core.pagination.mapItems
 import ink.qingshuige.csuplusplus.core.time.formatFriendlyTime
+import ink.qingshuige.csuplusplus.data.api.AuthApi
 import ink.qingshuige.csuplusplus.data.api.CourseApi
 import ink.qingshuige.csuplusplus.data.api.FileApi
 import ink.qingshuige.csuplusplus.data.dto.CourseResponse
@@ -46,6 +48,7 @@ data class CourseFile(
     val id: Long,
     val name: String,
     val extension: String,
+    val uploaderUserId: Long,
     val uploaderName: String,
     val type: CourseFileType,
 )
@@ -63,18 +66,27 @@ data class CourseFileUploadUiState(
     val errorMessage: String? = null,
 )
 
+data class CourseFileDeleteUiState(
+    val file: CourseFile? = null,
+    val isDeleting: Boolean = false,
+)
+
 data class HomeUiState(
+    val currentUserId: Long? = null,
     val courses: PagedState<CourseSummary> = PagedState(),
     val selectedCourseId: Long? = null,
     val detailState: CourseDetailUiState = CourseDetailUiState.Empty,
     val files: PagedState<CourseFile> = PagedState(),
     val downloadingFileIds: Set<Long> = emptySet(),
     val uploadState: CourseFileUploadUiState = CourseFileUploadUiState(),
+    val deleteState: CourseFileDeleteUiState = CourseFileDeleteUiState(),
 )
 
 class HomeViewModel(
     private val courseApi: CourseApi,
     private val fileApi: FileApi,
+    private val authApi: AuthApi,
+    private val tokenProvider: TokenProvider,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -84,6 +96,7 @@ class HomeViewModel(
     val messages = _messages.receiveAsFlow()
 
     private var detailJob: Job? = null
+    private var profileJob: Job? = null
     private var activeDetailCourseId: Long? = null
 
     private val coursePaginator = Paginator(
@@ -122,7 +135,19 @@ class HomeViewModel(
     )
 
     init {
-        coursePaginator.refresh()
+        viewModelScope.launch {
+            tokenProvider.tokenFlow
+                .collect { token ->
+                    detailJob?.cancel()
+                    profileJob?.cancel()
+                    activeDetailCourseId = null
+                    _uiState.value = HomeUiState()
+                    if (token != null) {
+                        loadCurrentUser()
+                        coursePaginator.refresh(clearItems = true)
+                    }
+                }
+        }
     }
 
     fun refreshCourses() {
@@ -147,6 +172,9 @@ class HomeViewModel(
 
     fun selectCourse(courseId: Long) {
         val currentState = _uiState.value
+        if (currentState.currentUserId == null && profileJob?.isActive != true) {
+            loadCurrentUser()
+        }
         if (currentState.selectedCourseId == courseId &&
             currentState.detailState is CourseDetailUiState.Success
         ) {
@@ -194,6 +222,9 @@ class HomeViewModel(
 
     fun retryDetail() {
         val courseId = _uiState.value.selectedCourseId ?: return
+        if (_uiState.value.currentUserId == null && profileJob?.isActive != true) {
+            loadCurrentUser()
+        }
         _uiState.update { it.copy(detailState = CourseDetailUiState.Loading) }
         activeDetailCourseId = courseId
         filePaginator.refresh(clearItems = true)
@@ -215,7 +246,10 @@ class HomeViewModel(
     }
 
     fun downloadFile(file: CourseFile, fileSaver: PlatformFileSaver) {
-        if (file.id in _uiState.value.downloadingFileIds) return
+        val currentState = _uiState.value
+        val isDeletingThisFile =
+            currentState.deleteState.isDeleting && currentState.deleteState.file?.id == file.id
+        if (file.id in currentState.downloadingFileIds || isDeletingThisFile) return
 
         viewModelScope.launch {
             _uiState.update { it.copy(downloadingFileIds = it.downloadingFileIds + file.id) }
@@ -232,6 +266,46 @@ class HomeViewModel(
                 }
             } finally {
                 _uiState.update { it.copy(downloadingFileIds = it.downloadingFileIds - file.id) }
+            }
+        }
+    }
+
+    fun requestDeleteFile(file: CourseFile) {
+        val currentState = _uiState.value
+        if (currentState.deleteState.isDeleting || file.id in currentState.downloadingFileIds) return
+        if (currentState.currentUserId != file.uploaderUserId) return
+        _uiState.update { it.copy(deleteState = CourseFileDeleteUiState(file = file)) }
+    }
+
+    fun dismissDeleteDialog() {
+        val deleteState = _uiState.value.deleteState
+        if (deleteState.file == null || deleteState.isDeleting) return
+        _uiState.update { it.copy(deleteState = CourseFileDeleteUiState()) }
+    }
+
+    fun confirmDeleteFile() {
+        val currentState = _uiState.value
+        val file = currentState.deleteState.file ?: return
+        if (currentState.deleteState.isDeleting || file.id in currentState.downloadingFileIds) return
+
+        val courseId = activeDetailCourseId
+        viewModelScope.launch {
+            _uiState.update { it.copy(deleteState = it.deleteState.copy(isDeleting = true)) }
+            try {
+                fileApi.deleteFile(file.id).fold(
+                    onSuccess = {
+                        if (activeDetailCourseId == courseId) {
+                            filePaginator.removeItems { it.id == file.id }
+                        }
+                        _messages.send("删除成功")
+                    },
+                    onFailure = { error ->
+                        if (error is CancellationException) throw error
+                        _messages.send(error.userMessage)
+                    },
+                )
+            } finally {
+                _uiState.update { it.copy(deleteState = CourseFileDeleteUiState()) }
             }
         }
     }
@@ -305,9 +379,12 @@ class HomeViewModel(
                 friendlyFilename = normalizedFriendlyName,
                 contentType = contentType,
             ).fold(
-                onSuccess = {
+                onSuccess = { uploaded ->
                     _uiState.update {
-                        it.copy(uploadState = CourseFileUploadUiState())
+                        it.copy(
+                            currentUserId = it.currentUserId ?: uploaded.uploaderUserId,
+                            uploadState = CourseFileUploadUiState(),
+                        )
                     }
                     if (activeDetailCourseId == courseId) {
                         filePaginator.refresh()
@@ -326,6 +403,16 @@ class HomeViewModel(
                     }
                 },
             )
+        }
+    }
+
+    private fun loadCurrentUser() {
+        if (tokenProvider.getToken() == null) return
+        profileJob?.cancel()
+        profileJob = viewModelScope.launch {
+            authApi.getMyProfile().onSuccess { profile ->
+                _uiState.update { it.copy(currentUserId = profile.id) }
+            }
         }
     }
 }
@@ -353,6 +440,7 @@ private fun FileMetadataResponse.toCourseFile(): CourseFile {
         id = id,
         name = displayName,
         extension = ext.uppercase(),
+        uploaderUserId = uploaderUserId,
         uploaderName = uploaderUserNickname,
         type = type,
     )

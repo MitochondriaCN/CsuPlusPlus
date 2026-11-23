@@ -98,6 +98,7 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
                 CourseDetailPane(
                     detailState = uiState.detailState,
                     filesState = uiState.files,
+                    currentUserId = uiState.currentUserId,
                     downloadingFileIds = uiState.downloadingFileIds,
                     isUploadingFile = uiState.uploadState.isUploading,
                     showBackButton = !isDualPane,
@@ -112,6 +113,7 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
                     onFileClick = { file ->
                         viewModel.downloadFile(file, fileSaver)
                     },
+                    onDeleteFileClick = viewModel::requestDeleteFile,
                 )
             }
         },
@@ -129,6 +131,53 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
                     friendlyName = friendlyName,
                     readBytes = { file.platformFile.readBytes() },
                 )
+            },
+        )
+    }
+
+    uiState.deleteState.file?.let { file ->
+        val isDeleting = uiState.deleteState.isDeleting
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDeleting) viewModel.dismissDeleteDialog()
+            },
+            icon = {
+                Icon(
+                    imageVector = Lucide.Trash2,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            title = { Text("删除文件") },
+            text = { Text("确定要删除「${file.name}」吗？删除后将无法恢复。") },
+            confirmButton = {
+                TextButton(
+                    onClick = viewModel::confirmDeleteFile,
+                    enabled = !isDeleting,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    if (isDeleting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = LocalContentColor.current,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("删除中...")
+                    } else {
+                        Text("删除")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = viewModel::dismissDeleteDialog,
+                    enabled = !isDeleting,
+                ) {
+                    Text("取消")
+                }
             },
         )
     }
@@ -383,6 +432,7 @@ private fun MetadataPill(
 private fun CourseDetailPane(
     detailState: CourseDetailUiState,
     filesState: PagedState<CourseFile>,
+    currentUserId: Long?,
     downloadingFileIds: Set<Long>,
     isUploadingFile: Boolean,
     showBackButton: Boolean,
@@ -393,6 +443,7 @@ private fun CourseDetailPane(
     onLoadMoreFiles: () -> Unit,
     onRetryFiles: () -> Unit,
     onFileClick: (CourseFile) -> Unit,
+    onDeleteFileClick: (CourseFile) -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val title = when (detailState) {
@@ -490,6 +541,7 @@ private fun CourseDetailPane(
                     CourseDetailContent(
                         course = detailState.course,
                         filesState = filesState,
+                        currentUserId = currentUserId,
                         downloadingFileIds = downloadingFileIds,
                         modifier = Modifier
                             .widthIn(max = 760.dp)
@@ -497,6 +549,7 @@ private fun CourseDetailPane(
                         onLoadMoreFiles = onLoadMoreFiles,
                         onRetryFiles = onRetryFiles,
                         onFileClick = onFileClick,
+                        onDeleteFileClick = onDeleteFileClick,
                     )
                 }
             }
@@ -544,11 +597,13 @@ private fun EmptyDetailPlaceholder(modifier: Modifier = Modifier) {
 private fun CourseDetailContent(
     course: CourseSummary,
     filesState: PagedState<CourseFile>,
+    currentUserId: Long?,
     downloadingFileIds: Set<Long>,
     modifier: Modifier = Modifier,
     onLoadMoreFiles: () -> Unit,
     onRetryFiles: () -> Unit,
     onFileClick: (CourseFile) -> Unit,
+    onDeleteFileClick: (CourseFile) -> Unit,
 ) {
     PaginatedLazyColumn(
         pagedState = filesState,
@@ -661,7 +716,9 @@ private fun CourseDetailContent(
         CourseFileItem(
             file = file,
             isDownloading = file.id in downloadingFileIds,
+            canDelete = currentUserId != null && file.uploaderUserId == currentUserId,
             onClick = { onFileClick(file) },
+            onDeleteClick = { onDeleteFileClick(file) },
         )
     }
 }
@@ -698,7 +755,9 @@ private fun InfoRow(
 private fun CourseFileItem(
     file: CourseFile,
     isDownloading: Boolean,
+    canDelete: Boolean,
     onClick: () -> Unit,
+    onDeleteClick: () -> Unit,
 ) {
     val fileIcon = when (file.type) {
         CourseFileType.PDF -> Lucide.FileText
@@ -734,7 +793,12 @@ private fun CourseFileItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(
+                    start = 16.dp,
+                    end = if (canDelete) 8.dp else 16.dp,
+                    top = 14.dp,
+                    bottom = 14.dp,
+                ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Surface(
@@ -786,6 +850,21 @@ private fun CourseFileItem(
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            if (canDelete) {
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = onDeleteClick,
+                    enabled = !isDownloading,
+                ) {
+                    Icon(
+                        imageVector = Lucide.Trash2,
+                        contentDescription = "删除文件",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         }
     }
