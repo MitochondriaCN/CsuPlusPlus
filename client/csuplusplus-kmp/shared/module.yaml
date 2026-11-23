@@ -2,6 +2,9 @@ product:
   type: kmp/lib
   platforms: [ jvm, android, iosArm64, iosSimulatorArm64, wasmJs ]
 
+aliases:
+  - nonWeb: [ jvm, android, iosArm64, iosSimulatorArm64 ]
+
 dependencies:
   - $compose.runtime
   - $compose.foundation
@@ -13,14 +16,20 @@ dependencies:
   - $libs.androidx.lifecycle.viewmodel.compose
   - $libs.androidx.lifecycle.runtime.compose
   - $libs.material3.adaptive.navigation.suite
+  - $libs.material3.adaptive
+  - $libs.material3.adaptive.layout
+  - $libs.material3.adaptive.navigation
   - $libs.icons.lucide.cmp
   - $libs.koin.core
   - $libs.koin.compose
   - $libs.koin.compose.viewmodel
+  - $libs.ksafe
+  - $libs.filekit.dialogs.compose
   - $ktor.client.core
   - $ktor.client.contentNegotiation
   - $ktor.serialization.kotlinx.json
   - $ktor.client.logging
+  - $kotlin.serialization.json
   - io.ktor:ktor-client-engine-defaults
 
 dependencies@android:
@@ -28,9 +37,7 @@ dependencies@android:
 
 settings:
   kotlin:
-    serialization:
-      format: json
-      version: 1.11.0
+    serialization: enabled
   ktor:
     enabled: true
   compose:
