@@ -98,7 +98,6 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CourseListPane(
     coursesState: PagedState<CourseSummary>,
