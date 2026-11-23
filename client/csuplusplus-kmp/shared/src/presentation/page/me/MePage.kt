@@ -36,15 +36,7 @@ fun MePage(viewModel: MeViewModel = koinViewModel()) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("我的", style = MaterialTheme.typography.titleLarge) },
-                actions = {
-                    IconButton(
-                        onClick = viewModel::refreshProfile,
-                        enabled = !uiState.isLoading,
-                    ) {
-                        Icon(Lucide.RefreshCw, contentDescription = "刷新资料")
-                    }
-                },
+                title = { Text("我的", style = MaterialTheme.typography.titleLarge) }
             )
         },
     ) { innerPadding ->
