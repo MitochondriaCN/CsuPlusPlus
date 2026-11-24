@@ -19,12 +19,14 @@ import ink.qingshuige.csuplusplus.data.dto.PagedResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 data class CourseSummary(
     val id: Long,
@@ -73,6 +75,8 @@ data class CourseFileDeleteUiState(
 
 data class HomeUiState(
     val currentUserId: Long? = null,
+    val searchQuery: String = "",
+    val activeSearchQuery: String = "",
     val courses: PagedState<CourseSummary> = PagedState(),
     val selectedCourseId: Long? = null,
     val detailState: CourseDetailUiState = CourseDetailUiState.Empty,
@@ -97,6 +101,7 @@ class HomeViewModel(
 
     private var detailJob: Job? = null
     private var profileJob: Job? = null
+    private var searchDebounceJob: Job? = null
     private var activeDetailCourseId: Long? = null
 
     private val coursePaginator = Paginator(
@@ -105,7 +110,13 @@ class HomeViewModel(
             _uiState.update { it.copy(courses = paged) }
         },
         fetchPage = { query ->
-            courseApi.list(query).map { resp ->
+            val keyword = _uiState.value.activeSearchQuery
+            val result = if (keyword.isBlank()) {
+                courseApi.list(query)
+            } else {
+                courseApi.search(keyword = keyword, query = query)
+            }
+            result.map { resp ->
                 resp.mapItems(CourseResponse::toSummary)
             }
         },
@@ -140,6 +151,7 @@ class HomeViewModel(
                 .collect { token ->
                     detailJob?.cancel()
                     profileJob?.cancel()
+                    searchDebounceJob?.cancel()
                     activeDetailCourseId = null
                     _uiState.value = HomeUiState()
                     if (token != null) {
@@ -148,6 +160,47 @@ class HomeViewModel(
                     }
                 }
         }
+    }
+
+    fun onSearchQueryChange(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+        val normalized = query.trim()
+        searchDebounceJob?.cancel()
+        if (normalized == _uiState.value.activeSearchQuery) {
+            return
+        }
+        searchDebounceJob = viewModelScope.launch {
+            delay(300L.milliseconds)
+            executeSearch(normalized)
+        }
+    }
+
+    fun submitSearch() {
+        searchDebounceJob?.cancel()
+        val normalized = _uiState.value.searchQuery.trim()
+        if (normalized != _uiState.value.activeSearchQuery || _uiState.value.courses.errorMessage != null) {
+            executeSearch(normalized)
+        }
+    }
+
+    fun clearSearch() {
+        searchDebounceJob?.cancel()
+        val hadActiveQuery = _uiState.value.activeSearchQuery.isNotEmpty()
+        _uiState.update { it.copy(searchQuery = "", activeSearchQuery = "") }
+        if (hadActiveQuery) {
+            coursePaginator.refresh(clearItems = true)
+        }
+    }
+
+    private fun executeSearch(normalizedQuery: String) {
+        if (_uiState.value.activeSearchQuery == normalizedQuery &&
+            _uiState.value.courses.errorMessage == null &&
+            _uiState.value.courses.page > 0
+        ) {
+            return
+        }
+        _uiState.update { it.copy(activeSearchQuery = normalizedQuery) }
+        coursePaginator.refresh(clearItems = true)
     }
 
     fun refreshCourses() {

@@ -1,8 +1,17 @@
 package ink.qingshuige.csuplusplus.presentation.page.home
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
@@ -14,15 +23,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -78,9 +93,14 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
         listPane = {
             AnimatedPane {
                 CourseListPane(
+                    searchQuery = uiState.searchQuery,
+                    activeSearchQuery = uiState.activeSearchQuery,
                     coursesState = uiState.courses,
                     // 仅在双栏同时可见时高亮选中卡片
                     highlightedCourseId = if (isDualPane) uiState.selectedCourseId else null,
+                    onSearchQueryChange = viewModel::onSearchQueryChange,
+                    onSearchSubmit = viewModel::submitSearch,
+                    onClearSearch = viewModel::clearSearch,
                     onRefresh = viewModel::refreshCourses,
                     onLoadMore = viewModel::loadMoreCourses,
                     onRetry = viewModel::retryCourses,
@@ -183,47 +203,128 @@ fun HomePage(viewModel: HomeViewModel = koinViewModel()) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CourseListPane(
+    searchQuery: String,
+    activeSearchQuery: String,
     coursesState: PagedState<CourseSummary>,
     highlightedCourseId: Long?,
+    onSearchQueryChange: (String) -> Unit,
+    onSearchSubmit: () -> Unit,
+    onClearSearch: () -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
     onRetry: () -> Unit,
     onCourseClick: (CourseSummary) -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val listState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
+    val searchFocusRequester = remember { FocusRequester() }
+    var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
+    var requestSearchFocus by remember { mutableStateOf(false) }
+
+    val isSearching = activeSearchQuery.isNotBlank()
     val subtitle = when {
+        isSearching && coursesState.isFirstLoading -> "搜索课程中..."
+        isSearching && coursesState.page > 0 -> "找到 ${coursesState.totalCount} 门匹配课程"
+        isSearching -> "搜索课程"
         coursesState.isFirstLoading -> "加载课程中..."
         coursesState.page > 0 -> "共 ${coursesState.totalCount} 门课程"
         else -> "发现与浏览课程资料"
     }
 
+    LaunchedEffect(searchQuery, activeSearchQuery) {
+        if ((searchQuery.isNotEmpty() || activeSearchQuery.isNotEmpty()) && !isSearchExpanded) {
+            isSearchExpanded = true
+        }
+    }
+
+    LaunchedEffect(activeSearchQuery) {
+        listState.scrollToItem(0)
+    }
+
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = "课程列表",
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+            AnimatedContent(
+                targetState = isSearchExpanded,
+                transitionSpec = {
+                    fadeIn(tween(180)) togetherWith fadeOut(tween(140))
                 },
-                actions = {
-                    IconButton(onClick = onRefresh) {
-                        Icon(Lucide.RefreshCw, contentDescription = "刷新课程")
+                label = "CourseListTopBar",
+            ) { expanded ->
+                if (expanded) {
+                    LaunchedEffect(requestSearchFocus) {
+                        if (requestSearchFocus) {
+                            searchFocusRequester.requestFocus()
+                            requestSearchFocus = false
+                        }
                     }
-                },
-                scrollBehavior = scrollBehavior,
-            )
+
+                    TopAppBar(
+                        navigationIcon = {
+                            IconButton(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    requestSearchFocus = false
+                                    isSearchExpanded = false
+                                    onClearSearch()
+                                },
+                            ) {
+                                Icon(Lucide.ArrowLeft, contentDescription = "关闭搜索")
+                            }
+                        },
+                        title = {
+                            CourseSearchField(
+                                query = searchQuery,
+                                onQueryChange = onSearchQueryChange,
+                                onSearch = {
+                                    focusManager.clearFocus()
+                                    onSearchSubmit()
+                                },
+                                onClear = {
+                                    onClearSearch()
+                                    requestSearchFocus = true
+                                },
+                                focusRequester = searchFocusRequester,
+                                modifier = Modifier.padding(end = 12.dp),
+                            )
+                        },
+                        scrollBehavior = scrollBehavior,
+                    )
+                } else {
+                    TopAppBar(
+                        title = {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = "课程列表",
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = {
+                                    isSearchExpanded = true
+                                    requestSearchFocus = true
+                                },
+                            ) {
+                                Icon(Lucide.Search, contentDescription = "搜索课程")
+                            }
+                            IconButton(onClick = onRefresh) {
+                                Icon(Lucide.RefreshCw, contentDescription = "刷新课程")
+                            }
+                        },
+                        scrollBehavior = scrollBehavior,
+                    )
+                }
+            }
         },
     ) { innerPadding ->
         PaginatedLazyColumn(
@@ -233,15 +334,41 @@ private fun CourseListPane(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
+            listState = listState,
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             itemKey = { it.id },
             emptyContent = {
-                Text(
-                    text = "暂无课程",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (isSearching) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = "未找到与「$activeSearchQuery」相关的课程",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                        FilledTonalButton(
+                            onClick = {
+                                focusManager.clearFocus()
+                                requestSearchFocus = false
+                                isSearchExpanded = false
+                                onClearSearch()
+                            },
+                        ) {
+                            Text("查看全部课程")
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "暂无课程",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             },
         ) { course ->
             CourseCard(
@@ -253,7 +380,83 @@ private fun CourseListPane(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CourseSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    onClear: () -> Unit,
+    focusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(42.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 14.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = Lucide.Search,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (query.isEmpty()) {
+                    Text(
+                        text = "搜索课程名称或简称",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                )
+            }
+
+            if (query.isNotEmpty()) {
+                IconButton(
+                    onClick = onClear,
+                    modifier = Modifier.size(34.dp),
+                ) {
+                    Icon(
+                        imageVector = Lucide.X,
+                        contentDescription = "清除搜索",
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+        }
+    }
+}
+
 @Composable
 private fun CourseCard(
     course: CourseSummary,
