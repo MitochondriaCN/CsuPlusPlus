@@ -228,7 +228,7 @@ public class FileService(
         // 校验格式
         FileFormat format;
         await using (var stream = request.File.OpenReadStream())
-            format = await FileFormatSniffer.DetectAsync(stream, cancellationToken);
+            format = await FileFormatSniffer.DetectAsync(stream, cancellationToken, request.File.FileName);
 
         var extension = format.ToExtension();
         if (extension is null)
@@ -354,6 +354,11 @@ public class FileService(
             ".pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             ".zip" => "application/zip",
+            ".md" => "text/markdown; charset=utf-8",
+            ".png" => "image/png",
+            ".jpg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
             _ => "application/octet-stream"
         };
 }
