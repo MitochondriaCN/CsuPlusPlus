@@ -22,7 +22,7 @@ cp build/tasks/_desktopApp_executableJarJvm/*.jar build/jpackage-input/
   jpackage \
     --type dmg \
     --name "CSU++" \
-    --app-version "0.1.1" \
+    --app-version "0.1.2" \
     --mac-package-identifier "ink.qingshuige.csuplusplus" \
     --mac-package-name "CSU++" \
     --icon desktopApp/resources/AppIcon.icns \

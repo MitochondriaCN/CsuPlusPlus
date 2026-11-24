@@ -11,7 +11,7 @@ import ink.qingshuige.csuplusplus.data.dto.UserProfileDto
  */
 class AuthApi(private val api: ApiClient) {
 
-    suspend fun register(request: RegisterRequest): Result<UserProfileDto> =
+    suspend fun register(request: RegisterRequest): Result<LoginResponse> =
         api.post("auth/register", body = request)
 
     suspend fun login(request: LoginRequest): Result<LoginResponse> =
