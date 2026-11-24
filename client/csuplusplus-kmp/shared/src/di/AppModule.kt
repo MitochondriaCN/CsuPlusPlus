@@ -1,5 +1,6 @@
 package ink.qingshuige.csuplusplus.di
 
+import ink.qingshuige.csuplusplus.getPlatform
 import ink.qingshuige.csuplusplus.presentation.page.auth.AuthPageViewModel
 import ink.qingshuige.csuplusplus.presentation.page.home.HomeViewModel
 import ink.qingshuige.csuplusplus.presentation.page.me.MeViewModel
@@ -8,6 +9,7 @@ import org.koin.dsl.module
 
 val appModule = module {
     includes(networkModule)
+    single { getPlatform() }
     viewModelOf(::HomeViewModel)
     viewModelOf(::AuthPageViewModel)
     viewModelOf(::MeViewModel)

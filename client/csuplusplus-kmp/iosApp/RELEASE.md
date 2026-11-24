@@ -4,10 +4,8 @@
 
 ## 发版前准备
 
-在 Xcode 中打开 `iosApp/module.xcodeproj` 确认：
-
-- **Signing & Capabilities**：选定 `Team` 与正式唯一的 `Bundle Identifier`。
-- **General | Identity**：更新 `Version`（`MARKETING_VERSION`），并递增 `Build`（`CURRENT_PROJECT_VERSION`）。
+1. 运行 `./scripts/sync-version.sh <buildCode> <buildName>`（或修改 `version.properties` 后运行 `./scripts/sync-version.sh`）统一同步 `MARKETING_VERSION` 与 `CURRENT_PROJECT_VERSION`。
+2. 在 Xcode 中打开 `iosApp/module.xcodeproj` 确认 **Signing & Capabilities** 已选定 `Team` 与正式唯一的 `Bundle Identifier`。
 
 ## 打包与发布
 
