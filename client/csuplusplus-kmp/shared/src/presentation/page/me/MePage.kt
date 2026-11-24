@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -18,12 +19,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.*
 import ink.qingshuige.csuplusplus.data.dto.UserProfileDto
 import ink.qingshuige.csuplusplus.getPlatform
+import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun MePage(viewModel: MeViewModel = koinViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val uriHandler = LocalUriHandler.current
+    val scope = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
@@ -73,6 +77,8 @@ fun MePage(viewModel: MeViewModel = koinViewModel()) {
                 uiState.profile != null -> {
                     MeContent(
                         profile = uiState.profile!!,
+                        isCheckingUpdate = uiState.isCheckingUpdate,
+                        onCheckUpdateClick = viewModel::checkForUpdates,
                         onLogoutClick = { showLogoutDialog = true },
                         modifier = Modifier
                             .widthIn(max = 600.dp)
@@ -89,6 +95,60 @@ fun MePage(viewModel: MeViewModel = koinViewModel()) {
                 )
             }
         }
+    }
+
+    uiState.availableUpdate?.let { update ->
+        val release = update.release
+        val targetUrl = release.releaseUrl.trim()
+        val hasValidUrl = targetUrl.isNotEmpty()
+
+        AlertDialog(
+            onDismissRequest = viewModel::dismissUpdateDialog,
+            icon = { Icon(Lucide.ArrowUpRight, contentDescription = null) },
+            title = { Text("发现新版本") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "最新版本：${release.currentBuildName}（Build ${release.currentBuildCode}）\n当前版本：Build ${update.currentBuildCode}",
+                    )
+                    if (hasValidUrl) {
+                        Text(
+                            text = "是否前往浏览器打开以下链接获取更新？\n$targetUrl",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Text(
+                            text = "服务端未提供可用的更新链接。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                if (hasValidUrl) {
+                    TextButton(
+                        onClick = {
+                            viewModel.dismissUpdateDialog()
+                            runCatching { uriHandler.openUri(targetUrl) }
+                                .onFailure {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("无法在浏览器中打开链接")
+                                    }
+                                }
+                        },
+                    ) {
+                        Text("前往更新")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissUpdateDialog) {
+                    Text(if (hasValidUrl) "稍后再说" else "关闭")
+                }
+            },
+        )
     }
 
     if (showLogoutDialog) {
@@ -122,10 +182,12 @@ fun MePage(viewModel: MeViewModel = koinViewModel()) {
 @Composable
 private fun MeContent(
     profile: UserProfileDto,
+    isCheckingUpdate: Boolean,
+    onCheckUpdateClick: () -> Unit,
     onLogoutClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val platformName = remember { getPlatform().name }
+    val platform = remember { getPlatform() }
     val avatarInitial = remember(profile.nickname) {
         profile.nickname.trim().firstOrNull()?.uppercaseChar()?.toString()
     }
@@ -234,7 +296,39 @@ private fun MeContent(
                 HorizontalDivider()
                 ProfileInfoRow(icon = Lucide.GraduationCap, label = "所属学院", value = profile.collegeName)
                 HorizontalDivider()
-                ProfileInfoRow(icon = Lucide.Info, label = "运行平台", value = platformName)
+                ProfileInfoRow(icon = Lucide.Info, label = "运行平台", value = platform.name)
+                HorizontalDivider()
+                ProfileInfoRow(
+                    icon = Lucide.Tag,
+                    label = "当前版本",
+                    value = "${platform.buildName} (Build ${platform.buildCode})",
+                )
+            }
+        }
+
+        FilledTonalButton(
+            onClick = onCheckUpdateClick,
+            enabled = !isCheckingUpdate,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+        ) {
+            if (isCheckingUpdate) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = LocalContentColor.current,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("检查中...")
+            } else {
+                Icon(
+                    imageVector = Lucide.RefreshCw,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("检查更新")
             }
         }
 

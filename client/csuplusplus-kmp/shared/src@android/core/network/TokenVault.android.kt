@@ -26,6 +26,8 @@ internal actual fun BindPlatformTokenStorageContext() {
     }
 }
 
+internal fun getAndroidAppContext(): Context? = AndroidTokenVaultHolder.appContext
+
 internal actual fun getOrCreateAuthKSafe(): KSafe? {
     AndroidTokenVaultHolder.ksafe?.let { return it }
     val context = AndroidTokenVaultHolder.appContext ?: return null

@@ -85,5 +85,6 @@ val networkModule = module {
     singleOf(::CollegeApi)
     singleOf(::CourseApi)
     singleOf(::FileApi)
+    singleOf(::ReleaseApi)
 }
 

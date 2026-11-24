@@ -1,6 +1,6 @@
 # Desktop 构建与发布
 
-均在 `client/csuplusplus-kmp` 根目录执行。原生安装包需在对应目标操作系统上构建。
+均在 `client/csuplusplus-kmp` 根目录执行。原生安装包需在对应目标操作系统上构建。发版前请先通过 `./scripts/sync-version.sh` 统一同步版本号。
 
 ## 1. 打包可执行 JAR
 
@@ -22,7 +22,7 @@ cp build/tasks/_desktopApp_executableJarJvm/*.jar build/jpackage-input/
   jpackage \
     --type dmg \
     --name "CSU++" \
-    --app-version "0.1.0" \
+    --app-version "0.1.1" \
     --mac-package-identifier "ink.qingshuige.csuplusplus" \
     --mac-package-name "CSU++" \
     --icon desktopApp/resources/AppIcon.icns \
