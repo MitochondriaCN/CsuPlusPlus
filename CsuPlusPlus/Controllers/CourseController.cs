@@ -116,4 +116,38 @@ public class CourseController(ICourseService courseService, ICurrentUser current
                 title: "学院不属于该大学。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
+
+    [Authorize(Policy = Policies.ManageOwnUniversity)]
+    [HttpDelete("{id:long}")]
+    public async Task<IActionResult> Delete(
+        [FromRoute] long id,
+        CancellationToken cancellationToken)
+    {
+        if (currentUser.UniversityId is not { } universityId)
+            return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
+
+        return MapDeleteCourseResult(
+            await courseService.DeleteAsync(id, cancellationToken, universityId));
+    }
+
+    [Authorize(Policy = Policies.PlatformAdmin)]
+    [HttpDelete("any/{id:long}")]
+    public async Task<IActionResult> DeleteAny(
+        [FromRoute] long id,
+        CancellationToken cancellationToken) =>
+        MapDeleteCourseResult(
+            await courseService.DeleteAsync(id, cancellationToken));
+
+    private IActionResult MapDeleteCourseResult(DeleteCourseResponse result) =>
+        result.Status switch
+        {
+            DeleteCourseStatus.Success => Ok(),
+            DeleteCourseStatus.CourseNotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "课程不存在。"),
+            DeleteCourseStatus.CourseInOtherUniversity => Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "只能删除本校课程。"),
+            _ => throw new InvalidOperationException("未知结果。")
+        };
 }

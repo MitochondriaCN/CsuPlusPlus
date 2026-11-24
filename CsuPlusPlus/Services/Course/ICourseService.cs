@@ -16,4 +16,7 @@ public interface ICourseService
 
     Task<CreateCourseResponse> CreateAsync(long universityId, CreateCourseRequest request,
         CancellationToken cancellationToken);
+
+    Task<DeleteCourseResponse> DeleteAsync(long id, CancellationToken cancellationToken,
+        long? universityId = null);
 }
