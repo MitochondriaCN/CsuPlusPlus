@@ -129,4 +129,27 @@ public class CourseService(AppDbContext db) : ICourseService
         var created = await GetByIdAsync(course.Id, cancellationToken);
         return new CreateCourseResponse(CreateCourseStatus.Success, created.Response);
     }
+
+    public async Task<DeleteCourseResponse> DeleteAsync(long id, CancellationToken cancellationToken,
+        long? universityId = null)
+    {
+        var course = await db.Courses
+            .Include(c => c.University)
+            .SingleOrDefaultAsync(c => c.Id == id, cancellationToken);
+        if (course is null)
+            return new DeleteCourseResponse(DeleteCourseStatus.CourseNotFound);
+
+        if (universityId is { } scope && course.University.Id != scope)
+            return new DeleteCourseResponse(DeleteCourseStatus.CourseInOtherUniversity);
+
+        var courseFiles = await db.CourseFiles
+            .Where(cf => cf.CourseId == id)
+            .ToListAsync(cancellationToken);
+        db.CourseFiles.RemoveRange(courseFiles);
+
+        db.Courses.Remove(course);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new DeleteCourseResponse(DeleteCourseStatus.Success);
+    }
 }

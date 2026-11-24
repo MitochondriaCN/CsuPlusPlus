@@ -48,6 +48,7 @@ public class JsonSettingsService(AppDbContext db) : ISettingsService
         key switch
         {
             SettingsKey.UserFile => ToJson(await GetAsync(key, UserFileSettings.Default, cancellationToken)),
+            SettingsKey.Release => ToJson(await GetAsync(key, ReleaseSettings.Default, cancellationToken)),
             _ => throw new InvalidOperationException("未知配置键。")
         };
 

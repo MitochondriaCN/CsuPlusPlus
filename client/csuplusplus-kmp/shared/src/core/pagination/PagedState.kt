@@ -190,6 +190,24 @@ class Paginator<T>(
         commit { it.copy(items = transform(it.items)) }
     }
 
+    /**
+     * 在不重新请求网络的情况下移除满足条件的数据项，并同步更新 [PagedState.totalCount]。
+     */
+    fun removeItems(predicate: (T) -> Boolean) {
+        commit { state ->
+            val remaining = state.items.filterNot(predicate)
+            val removedCount = state.items.size - remaining.size
+            if (removedCount == 0) {
+                state
+            } else {
+                state.copy(
+                    items = remaining,
+                    totalCount = (state.totalCount - removedCount).coerceAtLeast(0L),
+                )
+            }
+        }
+    }
+
     private fun appendPage(targetPage: Int) {
         activeJob?.cancel()
         lastRequest = RequestType.APPEND

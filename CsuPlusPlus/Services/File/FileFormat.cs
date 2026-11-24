@@ -7,5 +7,10 @@ public enum FileFormat
     Docx,
     Pptx,
     Xlsx,
-    Zip
+    Zip,
+    Markdown,
+    Png,
+    Jpeg,
+    Gif,
+    Webp
 }
