@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSU++ — 高校课程信息与学习资料平台</title>
+  <meta name="description" content="CSU++ 是一款面向高校学生的课程信息与学习资料共享平台，支持 Android、iOS、桌面端与 Web，让学习资料更开放、平等地流动。" />
+  <link rel="icon" type="image/svg+xml" href="./logo.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#">
+        <svg class="brand-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="24" height="24" fill="none" aria-hidden="true">
+          <g fill="currentColor">
+            <polygon points="160,160 864,160 864,228 160,716" />
+            <polygon points="864,272 864,864 456,864" />
+          </g>
+        </svg>
+        <span>CSU++</span>
+      </a>
+      <nav class="nav" aria-label="主导航">
+        <a href="#features">产品介绍</a>
+        <a href="#downloads">下载客户端</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <span class="hero-badge">跨平台客户端 · 开放获取</span>
+        <h1>让高校学习资料<br />更开放、平等地流动</h1>
+        <p class="hero-desc">
+          CSU++ 是面向高校学生的课程信息与学习资料平台。按学校、学院与课程整理资料，提供简洁、无扰的多端原生体验。
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#downloads">立即下载</a>
+          <a class="btn btn-secondary" href="#features">了解详情</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <div class="container">
+        <h2 class="section-title">产品特点</h2>
+        <p class="section-subtitle">克制的设计，只保留学习与查阅真正需要的功能。</p>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>按院系与课程组织</h3>
+            <p>围绕学校、学院与具体课程建立清晰的资料索引，快速定位所需讲义、习题与参考内容。</p>
+          </article>
+          <article class="feature-card">
+            <h3>全平台原生体验</h3>
+            <p>基于 Kotlin Multiplatform 构建，覆盖 Android、iOS、Windows、macOS、Linux 与 Web。</p>
+          </article>
+          <article class="feature-card">
+            <h3>简洁专注，开放平等</h3>
+            <p>没有多余信息流与广告干扰，账号体系与资料结构清晰透明，专注学习本身。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="downloads" class="section">
+      <div class="container">
+        <h2 class="section-title">下载客户端</h2>
+        <p class="section-subtitle">选择适合你当前设备的版本。可将下方链接替换为实际发布包地址。</p>
+
+        <!-- 将 href 替换为实际构建产物或 GitHub Releases 下载地址 -->
+        <div class="download-list">
+          <div class="download-item">
+            <div class="download-info">
+              <h3>Android</h3>
+              <span class="download-meta">Android 8.0 及以上 · APK 安装包</span>
+            </div>
+            <div class="download-actions">
+              <a class="btn btn-primary" href="https://github.com/MitochondriaCN/CsuPlusPlus/releases/latest" target="_blank" rel="noopener noreferrer">下载 APK</a>
+            </div>
+          </div>
+
+          <div class="download-item">
+            <div class="download-info">
+              <h3>Windows</h3>
+              <span class="download-meta">Windows 10 / 11 (x64) · 安装包</span>
+            </div>
+            <div class="download-actions">
+              <a class="btn btn-secondary" href="https://github.com/MitochondriaCN/CsuPlusPlus/releases/latest" target="_blank" rel="noopener noreferrer">下载 .msi / .exe</a>
+            </div>
+          </div>
+
+          <div class="download-item">
+            <div class="download-info">
+              <h3>macOS</h3>
+              <span class="download-meta">macOS 12 及以上 (Apple Silicon / Intel) · DMG 镜像</span>
+            </div>
+            <div class="download-actions">
+              <a class="btn btn-secondary" href="https://github.com/MitochondriaCN/CsuPlusPlus/releases/latest" target="_blank" rel="noopener noreferrer">下载 .dmg</a>
+            </div>
+          </div>
+
+          <div class="download-item">
+            <div class="download-info">
+              <h3>Linux</h3>
+              <span class="download-meta">x86_64 · AppImage / DEB</span>
+            </div>
+            <div class="download-actions">
+              <a class="btn btn-secondary" href="https://github.com/MitochondriaCN/CsuPlusPlus/releases/latest" target="_blank" rel="noopener noreferrer">下载安装包</a>
+            </div>
+          </div>
+
+          <div class="download-item">
+            <div class="download-info">
+              <h3>iOS</h3>
+              <span class="download-meta">iOS 15.0 及以上 · iPhone / iPad</span>
+            </div>
+            <div class="download-actions">
+              <a class="btn btn-secondary" href="https://github.com/MitochondriaCN/CsuPlusPlus/releases/latest" target="_blank" rel="noopener noreferrer">前往获取</a>
+            </div>
+          </div>
+
+          <div class="download-item">
+            <div class="download-info">
+              <h3>Web 网页端</h3>
+              <span class="download-meta">基于 Kotlin/Wasm · 现代浏览器免安装使用</span>
+            </div>
+            <div class="download-actions">
+              <a class="btn btn-secondary" href="https://github.com/MitochondriaCN/CsuPlusPlus/releases/latest" target="_blank" rel="noopener noreferrer">打开网页版</a>
+            </div>
+          </div>
+        </div>
+
+        <p class="download-note">
+          提示：当前下载按钮默认指向仓库 Releases 页面；如有直链分发（如 CDN / 对象存储），只需修改 <code>landing/index.html</code> 中对应按钮的 <code>href</code> 即可。
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <span>CSU++ · 高校信息与学习资料平台</span>
+      <div class="footer-links">
+        <a href="https://github.com/MitochondriaCN/CsuPlusPlus" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/MitochondriaCN/CsuPlusPlus/releases" target="_blank" rel="noopener noreferrer">版本发布</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

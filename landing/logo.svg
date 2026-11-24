@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" fill="none" role="img" aria-labelledby="logo-title logo-desc">
+  <title id="logo-title">CSU++</title>
+  <desc id="logo-desc">CSU++ brand mark: a shaft of light breaking through darkness, symbolizing open and equal access to study materials.</desc>
+  <g id="csuplusplus-mark" fill="#1D5BD6">
+    <polygon id="upper-mass" points="160,160 864,160 864,228 160,716" />
+    <polygon id="lower-mass" points="864,272 864,864 456,864" />
+  </g>
+</svg>
