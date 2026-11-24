@@ -69,18 +69,9 @@ class AuthPageViewModel(
                     collegeId = collegeId,
                 ),
             ).fold(
-                onSuccess = {
-                    authApi.login(LoginRequest(trimmedEmail, password)).fold(
-                        onSuccess = { resp ->
-                            tokenProvider.updateToken(resp.token)
-                            _uiState.update { AuthPageUiState.Success }
-                        },
-                        onFailure = {
-                            _uiState.update {
-                                AuthPageUiState.LoggingIn(errorMessage = "注册成功，请使用新账号登录")
-                            }
-                        },
-                    )
+                onSuccess = { resp ->
+                    tokenProvider.updateToken(resp.token)
+                    _uiState.update { AuthPageUiState.Success }
                 },
                 onFailure = { e ->
                     updateSigningUp {
