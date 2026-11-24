@@ -17,7 +17,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261117065632_AddCourseFile";
+    public override string LastMigrationId => "20261124104537_AddCourseTrigramSearch";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -26,6 +26,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
             .HasAnnotation("ProductVersion", "11.0.0-rc.2.26504.105")
             .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+        NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
         NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
         modelBuilder.Entity("CsuPlusPlus.Models.College", b =>
@@ -99,6 +100,16 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.HasIndex("CollegeId");
 
                 b.HasIndex("UniversityId");
+
+                var index = b.HasIndex("Alias.Value");
+
+                NpgsqlIndexBuilderExtensions.HasMethod(index, "gin");
+                NpgsqlIndexBuilderExtensions.HasOperators(index, new[] { "gin_trgm_ops" });
+
+                var index0 = b.HasIndex("Name.Value");
+
+                NpgsqlIndexBuilderExtensions.HasMethod(index0, "gin");
+                NpgsqlIndexBuilderExtensions.HasOperators(index0, new[] { "gin_trgm_ops" });
 
                 b.ToTable("courses");
             });

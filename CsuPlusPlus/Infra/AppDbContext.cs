@@ -25,4 +25,22 @@ public class AppDbContext : DbContext
             configurationBuilder.Properties<DateTimeOffset>()
                 .HaveConversion<DateTimeOffsetToStringConverter>();
     }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.HasPostgresExtension("pg_trgm");
+
+            modelBuilder.Entity<Course>()
+                .HasIndex("Name.Value")
+                .HasMethod("gin")
+                .HasOperators("gin_trgm_ops");
+
+            modelBuilder.Entity<Course>()
+                .HasIndex("Alias.Value")
+                .HasMethod("gin")
+                .HasOperators("gin_trgm_ops");
+        }
+    }
 }
