@@ -7,5 +7,6 @@ public record FileMetadataResponse(
     string Extension,
     string Sha256Hash,
     long UploaderUserId,
-    string UploaderUserNickname
+    string UploaderUserNickname,
+    DateTimeOffset CreatedAt
 );

@@ -112,6 +112,8 @@ public class MailPasswordAuthService(
             new UserProfileDto(user.Id,
                 user.MailAddress.Value,
                 user.Nickname.Value,
+                user.College.University.Id,
+                user.College.University.Name.Value,
                 user.College.Id,
                 user.College.Name.Value));
     }
