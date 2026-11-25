@@ -38,7 +38,8 @@ public class FileService(
             Extension: file.Extension,
             Sha256Hash: Convert.ToHexStringLower(file.Sha256),
             UploaderUserId: file.Uploader.Id,
-            UploaderUserNickname: file.Uploader.Nickname.Value));
+            UploaderUserNickname: file.Uploader.Nickname.Value,
+            CreatedAt: file.CreatedAt));
     }
 
     public Task<CreateFileResponse> CreateFileAsync(CreateFileRequest request, long uploaderUserId,
@@ -308,7 +309,8 @@ public class FileService(
                 cf.File.Extension,
                 cf.File.Sha256,
                 UploaderUserId = cf.File.Uploader.Id,
-                UploaderUserNickname = cf.File.Uploader.Nickname.Value
+                UploaderUserNickname = cf.File.Uploader.Nickname.Value,
+                cf.File.CreatedAt
             })
             .ToListAsync(cancellationToken);
 
@@ -320,7 +322,8 @@ public class FileService(
                 Extension: f.Extension,
                 Sha256Hash: Convert.ToHexStringLower(f.Sha256),
                 UploaderUserId: f.UploaderUserId,
-                UploaderUserNickname: f.UploaderUserNickname)).ToList(),
+                UploaderUserNickname: f.UploaderUserNickname,
+                CreatedAt: f.CreatedAt)).ToList(),
             Page: pageRequest.Page,
             PageSize: pageRequest.PageSize,
             TotalCount: totalCount);
