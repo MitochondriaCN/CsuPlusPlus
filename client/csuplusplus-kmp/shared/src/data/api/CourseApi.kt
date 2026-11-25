@@ -14,6 +14,17 @@ class CourseApi(private val api: ApiClient) {
             pageParams(query)
         }
 
+    suspend fun search(
+        keyword: String? = null,
+        query: PageQuery = PageQuery(),
+    ): Result<PagedResponse<CourseResponse>> =
+        api.get("course/search") {
+            keyword?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                parameter("keyword", it)
+            }
+            pageParams(query)
+        }
+
     suspend fun listByCollege(
         collegeId: Long,
         query: PageQuery = PageQuery(),

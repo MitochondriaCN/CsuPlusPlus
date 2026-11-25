@@ -6,7 +6,6 @@ VERSION_FILE="$ROOT_DIR/version.properties"
 APP_VERSION_KT="$ROOT_DIR/shared/src/AppVersion.kt"
 ANDROID_MODULE_YAML="$ROOT_DIR/androidApp/module.yaml"
 IOS_PBXPROJ="$ROOT_DIR/iosApp/module.xcodeproj/project.pbxproj"
-DESKTOP_RELEASE_MD="$ROOT_DIR/desktopApp/RELEASE.md"
 
 usage() {
     cat <<EOF
@@ -26,30 +25,39 @@ validate_inputs() {
             exit 1
             ;;
     esac
-    if [ -z "$name" ]; then
-        echo "错误: buildName 不能为空" >&2
-        exit 1
-    fi
     case "$name" in
-        *\"*|*\;*|*$'\n'*)
-            echo "错误: buildName 包含非法字符: '$name'" >&2
+        ''|*\"*|*\;*)
+            echo "错误: buildName 不能为空且不能包含 \" 或 ;，当前为: '$name'" >&2
             exit 1
             ;;
     esac
+    if [ "$(printf '%s' "$name" | wc -l)" -ne 0 ]; then
+        echo "错误: buildName 不能包含换行符" >&2
+        exit 1
+    fi
 }
 
 read_prop() {
-    key="$1"
-    awk -F= -v k="$key" '
+    awk -F= -v k="$1" '
         /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
         $1 ~ "^[[:space:]]*" k "[[:space:]]*$" {
             val = substr($0, index($0, "=") + 1)
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
             gsub(/\r$/, "", val)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
             print val
             exit
         }
     ' "$VERSION_FILE"
+}
+
+awk_inplace() {
+    file="$1"
+    script="$2"
+    tmp_file=$(mktemp)
+    trap 'rm -f "$tmp_file"' EXIT
+    awk -v code="$BUILD_CODE" -v name="$BUILD_NAME" "$script" "$file" > "$tmp_file"
+    mv "$tmp_file" "$file"
+    trap - EXIT
 }
 
 check_only=0
@@ -70,10 +78,7 @@ elif [ "$#" -ne 0 ]; then
     exit 1
 fi
 
-if [ ! -f "$VERSION_FILE" ]; then
-    echo "错误: 未找到 $VERSION_FILE" >&2
-    exit 1
-fi
+[ -f "$VERSION_FILE" ] || { echo "错误: 未找到 $VERSION_FILE" >&2; exit 1; }
 
 BUILD_CODE=$(read_prop "buildCode")
 BUILD_NAME=$(read_prop "buildName")
@@ -121,41 +126,16 @@ const val DEFAULT_BUILD_CODE: Long = ${BUILD_CODE}L
 const val DEFAULT_BUILD_NAME: String = "$BUILD_NAME"
 EOF
 
-tmp_file=$(mktemp)
-trap 'rm -f "$tmp_file"' EXIT
-
-awk -v code="$BUILD_CODE" -v name="$BUILD_NAME" '
-    /^[[:space:]]*versionCode:/ {
-        sub(/versionCode:.*/, "versionCode: " code)
-    }
-    /^[[:space:]]*versionName:/ {
-        sub(/versionName:.*/, "versionName: \"" name "\"")
-    }
+awk_inplace "$ANDROID_MODULE_YAML" '
+    /^[[:space:]]*versionCode:/ { sub(/versionCode:.*/, "versionCode: " code) }
+    /^[[:space:]]*versionName:/ { sub(/versionName:.*/, "versionName: \"" name "\"") }
     { print }
-' "$ANDROID_MODULE_YAML" > "$tmp_file"
-mv "$tmp_file" "$ANDROID_MODULE_YAML"
+'
 
-tmp_file=$(mktemp)
-awk -v code="$BUILD_CODE" -v name="$BUILD_NAME" '
-    /CURRENT_PROJECT_VERSION = / {
-        sub(/CURRENT_PROJECT_VERSION = .*;/, "CURRENT_PROJECT_VERSION = " code ";")
-    }
-    /MARKETING_VERSION = / {
-        sub(/MARKETING_VERSION = .*;/, "MARKETING_VERSION = " name ";")
-    }
+awk_inplace "$IOS_PBXPROJ" '
+    /CURRENT_PROJECT_VERSION = / { sub(/CURRENT_PROJECT_VERSION = .*;/, "CURRENT_PROJECT_VERSION = " code ";") }
+    /MARKETING_VERSION = / { sub(/MARKETING_VERSION = .*;/, "MARKETING_VERSION = " name ";") }
     { print }
-' "$IOS_PBXPROJ" > "$tmp_file"
-mv "$tmp_file" "$IOS_PBXPROJ"
-
-if [ -f "$DESKTOP_RELEASE_MD" ]; then
-    tmp_file=$(mktemp)
-    awk -v name="$BUILD_NAME" '
-        /--app-version "/ {
-            sub(/--app-version "[^"]*"/, "--app-version \"" name "\"")
-        }
-        { print }
-    ' "$DESKTOP_RELEASE_MD" > "$tmp_file"
-    mv "$tmp_file" "$DESKTOP_RELEASE_MD"
-fi
+'
 
 echo "已同步版本到全平台: buildCode=$BUILD_CODE, buildName=$BUILD_NAME"

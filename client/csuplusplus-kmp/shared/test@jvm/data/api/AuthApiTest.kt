@@ -35,6 +35,8 @@ class AuthApiTest {
                 "id": 1,
                 "email": "test@csu.edu.cn",
                 "nickname": "Tester",
+                "universityId": 1,
+                "universityName": "中南大学",
                 "collegeId": 2,
                 "collegeName": "计算机学院"
               }
@@ -86,6 +88,8 @@ class AuthApiTest {
             assertEquals(1L, response.user.id)
             assertEquals("test@csu.edu.cn", response.user.email)
             assertEquals("Tester", response.user.nickname)
+            assertEquals(1L, response.user.universityId)
+            assertEquals("中南大学", response.user.universityName)
             assertEquals(2L, response.user.collegeId)
             assertEquals("计算机学院", response.user.collegeName)
 

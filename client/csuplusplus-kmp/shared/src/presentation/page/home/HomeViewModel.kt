@@ -19,12 +19,14 @@ import ink.qingshuige.csuplusplus.data.dto.PagedResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 data class CourseSummary(
     val id: Long,
@@ -40,6 +42,8 @@ enum class CourseFileType(val label: String) {
     PDF("PDF"),
     SLIDES("PPT"),
     ARCHIVE("ZIP"),
+    MARKDOWN("MD"),
+    IMAGE("IMAGE"),
     CODE("CODE"),
     OTHER("FILE"),
 }
@@ -50,6 +54,7 @@ data class CourseFile(
     val extension: String,
     val uploaderUserId: Long,
     val uploaderName: String,
+    val createdAt: String,
     val type: CourseFileType,
 )
 
@@ -73,6 +78,9 @@ data class CourseFileDeleteUiState(
 
 data class HomeUiState(
     val currentUserId: Long? = null,
+    val universityName: String? = null,
+    val searchQuery: String = "",
+    val activeSearchQuery: String = "",
     val courses: PagedState<CourseSummary> = PagedState(),
     val selectedCourseId: Long? = null,
     val detailState: CourseDetailUiState = CourseDetailUiState.Empty,
@@ -97,6 +105,7 @@ class HomeViewModel(
 
     private var detailJob: Job? = null
     private var profileJob: Job? = null
+    private var searchDebounceJob: Job? = null
     private var activeDetailCourseId: Long? = null
 
     private val coursePaginator = Paginator(
@@ -105,7 +114,13 @@ class HomeViewModel(
             _uiState.update { it.copy(courses = paged) }
         },
         fetchPage = { query ->
-            courseApi.list(query).map { resp ->
+            val keyword = _uiState.value.activeSearchQuery
+            val result = if (keyword.isBlank()) {
+                courseApi.list(query)
+            } else {
+                courseApi.search(keyword = keyword, query = query)
+            }
+            result.map { resp ->
                 resp.mapItems(CourseResponse::toSummary)
             }
         },
@@ -140,6 +155,7 @@ class HomeViewModel(
                 .collect { token ->
                     detailJob?.cancel()
                     profileJob?.cancel()
+                    searchDebounceJob?.cancel()
                     activeDetailCourseId = null
                     _uiState.value = HomeUiState()
                     if (token != null) {
@@ -148,6 +164,47 @@ class HomeViewModel(
                     }
                 }
         }
+    }
+
+    fun onSearchQueryChange(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+        val normalized = query.trim()
+        searchDebounceJob?.cancel()
+        if (normalized == _uiState.value.activeSearchQuery) {
+            return
+        }
+        searchDebounceJob = viewModelScope.launch {
+            delay(300L.milliseconds)
+            executeSearch(normalized)
+        }
+    }
+
+    fun submitSearch() {
+        searchDebounceJob?.cancel()
+        val normalized = _uiState.value.searchQuery.trim()
+        if (normalized != _uiState.value.activeSearchQuery || _uiState.value.courses.errorMessage != null) {
+            executeSearch(normalized)
+        }
+    }
+
+    fun clearSearch() {
+        searchDebounceJob?.cancel()
+        val hadActiveQuery = _uiState.value.activeSearchQuery.isNotEmpty()
+        _uiState.update { it.copy(searchQuery = "", activeSearchQuery = "") }
+        if (hadActiveQuery) {
+            coursePaginator.refresh(clearItems = true)
+        }
+    }
+
+    private fun executeSearch(normalizedQuery: String) {
+        if (_uiState.value.activeSearchQuery == normalizedQuery &&
+            _uiState.value.courses.errorMessage == null &&
+            _uiState.value.courses.page > 0
+        ) {
+            return
+        }
+        _uiState.update { it.copy(activeSearchQuery = normalizedQuery) }
+        coursePaginator.refresh(clearItems = true)
     }
 
     fun refreshCourses() {
@@ -254,10 +311,15 @@ class HomeViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(downloadingFileIds = it.downloadingFileIds + file.id) }
             try {
-                val result = fileSaver.saveWithPicker(
-                    suggestedName = file.name,
+                val download = fileApi.getCourseDownloadUrl(file.id).getOrElse { error ->
+                    _messages.send("下载失败：${error.userMessage}")
+                    return@launch
+                }
+                val result = fileSaver.saveFromUrl(
+                    url = download.url,
+                    suggestedName = download.downloadName.ifBlank { file.name },
                     extension = file.extension,
-                    fetchFile = { fileApi.downloadCourseFile(file.id) },
+                    fetchBytes = fileApi::downloadBytes,
                 )
                 when (result) {
                     is FileSaveResult.Success -> _messages.send(result.message)
@@ -411,7 +473,12 @@ class HomeViewModel(
         profileJob?.cancel()
         profileJob = viewModelScope.launch {
             authApi.getMyProfile().onSuccess { profile ->
-                _uiState.update { it.copy(currentUserId = profile.id) }
+                _uiState.update {
+                    it.copy(
+                        currentUserId = profile.id,
+                        universityName = profile.universityName,
+                    )
+                }
             }
         }
     }
@@ -427,13 +494,20 @@ private fun CourseResponse.toSummary(): CourseSummary = CourseSummary(
     updatedAt = formatFriendlyTime(updatedAt),
 )
 
-private fun FileMetadataResponse.toCourseFile(): CourseFile {
+internal fun FileMetadataResponse.toCourseFile(): CourseFile =
+    toCourseFile(::formatFriendlyTime)
+
+internal fun FileMetadataResponse.toCourseFile(
+    formatTime: (String) -> String,
+): CourseFile {
     val ext = extension.trim().trimStart('.').lowercase()
     val type = when (ext) {
         "pdf" -> CourseFileType.PDF
         "ppt", "pptx", "key" -> CourseFileType.SLIDES
         "zip", "rar", "7z", "tar", "gz" -> CourseFileType.ARCHIVE
-        "kt", "java", "c", "cpp", "h", "hpp", "py", "js", "ts", "rs", "go", "md", "txt" -> CourseFileType.CODE
+        "md", "markdown" -> CourseFileType.MARKDOWN
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg" -> CourseFileType.IMAGE
+        "kt", "java", "c", "cpp", "h", "hpp", "py", "js", "ts", "rs", "go", "txt" -> CourseFileType.CODE
         else -> CourseFileType.OTHER
     }
     return CourseFile(
@@ -442,6 +516,7 @@ private fun FileMetadataResponse.toCourseFile(): CourseFile {
         extension = ext.uppercase(),
         uploaderUserId = uploaderUserId,
         uploaderName = uploaderUserNickname,
+        createdAt = formatTime(createdAt),
         type = type,
     )
 }

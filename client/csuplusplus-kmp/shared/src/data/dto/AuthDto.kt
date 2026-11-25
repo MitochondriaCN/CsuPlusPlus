@@ -21,6 +21,8 @@ data class UserProfileDto(
     val id: Long,
     val email: String,
     val nickname: String,
+    val universityId: Long,
+    val universityName: String,
     val collegeId: Long,
     val collegeName: String,
 )
