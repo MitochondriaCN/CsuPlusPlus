@@ -311,10 +311,15 @@ class HomeViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(downloadingFileIds = it.downloadingFileIds + file.id) }
             try {
-                val result = fileSaver.saveWithPicker(
-                    suggestedName = file.name,
+                val download = fileApi.getCourseDownloadUrl(file.id).getOrElse { error ->
+                    _messages.send("下载失败：${error.userMessage}")
+                    return@launch
+                }
+                val result = fileSaver.saveFromUrl(
+                    url = download.url,
+                    suggestedName = download.downloadName.ifBlank { file.name },
                     extension = file.extension,
-                    fetchFile = { fileApi.downloadCourseFile(file.id) },
+                    fetchBytes = fileApi::downloadBytes,
                 )
                 when (result) {
                     is FileSaveResult.Success -> _messages.send(result.message)

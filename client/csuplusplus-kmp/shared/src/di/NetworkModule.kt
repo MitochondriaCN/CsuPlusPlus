@@ -3,6 +3,7 @@ package ink.qingshuige.csuplusplus.di
 import ink.qingshuige.csuplusplus.core.network.ApiClient
 import ink.qingshuige.csuplusplus.core.network.NetworkConfig
 import ink.qingshuige.csuplusplus.core.network.PersistentTokenProvider
+import ink.qingshuige.csuplusplus.core.network.SkipAuthAttributeKey
 import ink.qingshuige.csuplusplus.core.network.TokenProvider
 import ink.qingshuige.csuplusplus.core.network.getOrCreateAuthKSafe
 import ink.qingshuige.csuplusplus.data.api.*
@@ -62,8 +63,9 @@ val networkModule = module {
             }
         }.apply {
             plugin(HttpSend).intercept { request ->
+                val skipAuth = request.attributes.getOrNull(SkipAuthAttributeKey) == true
                 var sentBearerToken = false
-                if (!request.headers.contains(HttpHeaders.Authorization)) {
+                if (!skipAuth && !request.headers.contains(HttpHeaders.Authorization)) {
                     tokenProvider.getToken()?.let { token ->
                         request.headers.append(HttpHeaders.Authorization, "Bearer $token")
                         sentBearerToken = true

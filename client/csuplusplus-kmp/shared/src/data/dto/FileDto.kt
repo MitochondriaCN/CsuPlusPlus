@@ -23,23 +23,11 @@ data class CourseFileResponse(
     val fileId: Long,
 )
 
-data class DownloadedFile(
-    val bytes: ByteArray,
-    val fileName: String?,
-    val contentType: String?,
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is DownloadedFile) return false
-        return bytes.contentEquals(other.bytes) &&
-                fileName == other.fileName &&
-                contentType == other.contentType
-    }
+@Serializable
+data class DownloadFileUrlResponse(
+    val url: String,
+    val expiresAt: String,
+    val downloadName: String,
+    val contentType: String,
+)
 
-    override fun hashCode(): Int {
-        var result = bytes.contentHashCode()
-        result = 31 * result + (fileName?.hashCode() ?: 0)
-        result = 31 * result + (contentType?.hashCode() ?: 0)
-        return result
-    }
-}

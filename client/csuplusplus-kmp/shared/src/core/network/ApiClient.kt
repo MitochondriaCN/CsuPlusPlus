@@ -1,6 +1,5 @@
 package ink.qingshuige.csuplusplus.core.network
 
-import ink.qingshuige.csuplusplus.data.dto.DownloadedFile
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
@@ -9,12 +8,15 @@ import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.*
+import io.ktor.util.AttributeKey
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.io.IOException
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlin.coroutines.cancellation.CancellationException
+
+internal val SkipAuthAttributeKey = AttributeKey<Boolean>("SkipApiAuth")
 
 /**
  * Ktor 请求统一封装：
@@ -70,13 +72,18 @@ class ApiClient(
         decodeResponse(response)
     }
 
-    suspend fun downloadFile(
-        path: String,
+    /**
+     * 从外部完整 URL 下载二进制数据（如对象存储预签名链接），跳过业务鉴权与基础路径拼接。
+     */
+    suspend fun downloadBytes(
+        url: String,
         block: HttpRequestBuilder.() -> Unit = {},
-    ): Result<DownloadedFile> = safeNetworkCall {
+    ): Result<ByteArray> = safeNetworkCall {
         val response = httpClient.request {
             method = HttpMethod.Get
-            url(normalizePath(path))
+            url(url)
+            attributes.put(SkipAuthAttributeKey, true)
+            accept(ContentType.Any)
             timeout {
                 requestTimeoutMillis = config.downloadRequestTimeoutMillis
                 socketTimeoutMillis = config.downloadSocketTimeoutMillis
@@ -86,23 +93,7 @@ class ApiClient(
         if (!response.status.isSuccess()) {
             throw buildHttpException(response)
         }
-        val bytes = response.body<ByteArray>()
-        val contentDisposition = response.headers[HttpHeaders.ContentDisposition]
-            ?.let { runCatching { ContentDisposition.parse(it) }.getOrNull() }
-        val fileName = contentDisposition?.parameter(ContentDisposition.Parameters.FileNameAsterisk)
-            ?.let { raw ->
-                val encoded = if ("''" in raw) raw.substringAfter("''") else raw
-                runCatching { encoded.decodeURLQueryComponent(plusIsSpace = false) }.getOrDefault(encoded)
-            }
-            ?.takeIf { it.isNotBlank() }
-            ?: contentDisposition?.parameter(ContentDisposition.Parameters.FileName)
-                ?.trim('"')
-                ?.takeIf { it.isNotBlank() }
-        DownloadedFile(
-            bytes = bytes,
-            fileName = fileName,
-            contentType = response.headers[HttpHeaders.ContentType],
-        )
+        response.body<ByteArray>()
     }
 
     @PublishedApi

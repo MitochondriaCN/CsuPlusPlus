@@ -3,7 +3,6 @@ package ink.qingshuige.csuplusplus.core.file
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import ink.qingshuige.csuplusplus.core.network.userMessage
-import ink.qingshuige.csuplusplus.data.dto.DownloadedFile
 import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.dialogs.FileKitDialogSettings
 import io.github.vinceglb.filekit.dialogs.compose.rememberFileSaverLauncher
@@ -37,11 +36,16 @@ actual fun rememberPlatformFileSaver(): PlatformFileSaver {
 
     return remember(launcher) {
         object : PlatformFileSaver {
-            override suspend fun saveWithPicker(
+            override suspend fun saveFromUrl(
+                url: String,
                 suggestedName: String,
                 extension: String,
-                fetchFile: suspend () -> Result<DownloadedFile>,
+                fetchBytes: suspend (url: String) -> Result<ByteArray>,
             ): FileSaveResult {
+                if (url.isBlank()) {
+                    return FileSaveResult.Failure("下载失败：未获取到有效的下载链接")
+                }
+
                 val parts = resolveDownloadFileParts(suggestedName, extension)
                 val targetFile = try {
                     val deferred = CompletableDeferred<PlatformFile?>()
@@ -62,13 +66,13 @@ actual fun rememberPlatformFileSaver(): PlatformFileSaver {
                     return FileSaveResult.Failure("无法打开保存窗口：${e.message ?: "未知错误"}")
                 } ?: return FileSaveResult.Cancelled
 
-                val downloaded = fetchFile().getOrElse { error ->
+                val bytes = fetchBytes(url).getOrElse { error ->
                     return FileSaveResult.Failure("下载失败：${error.userMessage}")
                 }
 
                 return try {
                     withContext(Dispatchers.IO) {
-                        targetFile.write(downloaded.bytes)
+                        targetFile.write(bytes)
                     }
                     val savedName = targetFile.name.takeIf { it.isNotBlank() } ?: parts.fullName
                     FileSaveResult.Success("已保存：$savedName")

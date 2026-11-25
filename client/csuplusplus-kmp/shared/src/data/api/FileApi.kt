@@ -67,8 +67,11 @@ class FileApi(private val api: ApiClient) {
             parameter("fileId", fileId)
         }
 
-    suspend fun downloadCourseFile(id: Long): Result<DownloadedFile> =
-        api.downloadFile("file/download/course/$id")
+    suspend fun getCourseDownloadUrl(id: Long): Result<DownloadFileUrlResponse> =
+        api.get("file/download/course/$id")
+
+    suspend fun downloadBytes(url: String): Result<ByteArray> =
+        api.downloadBytes(url)
 
     suspend fun deleteFile(id: Long): Result<Unit> =
         api.delete("file/$id")
