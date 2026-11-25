@@ -1,3 +1,4 @@
+using System.Net;
 using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
@@ -37,6 +38,8 @@ public sealed class R2FileStorage : IFileStorage, IDisposable
         _s3Client = new AmazonS3Client(credentials, config);
     }
 
+    public void Dispose() => _s3Client.Dispose();
+
     public async Task UploadAsync(string objectKey, Stream content, string contentType,
         CancellationToken cancellationToken)
     {
@@ -51,6 +54,19 @@ public sealed class R2FileStorage : IFileStorage, IDisposable
         };
 
         await _s3Client.PutObjectAsync(request, cancellationToken);
+    }
+
+    public async Task<bool> ExistsAsync(string objectKey, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _s3Client.GetObjectMetadataAsync(_options.BucketName, objectKey, cancellationToken);
+            return true;
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return false;
+        }
     }
 
     public Task DeleteAsync(string objectKey, CancellationToken cancellationToken) =>
@@ -76,6 +92,4 @@ public sealed class R2FileStorage : IFileStorage, IDisposable
         var url = _s3Client.GetPreSignedURL(request);
         return new DownloadFileUrlResponse(url, expiresAt, downloadName, contentType);
     }
-
-    public void Dispose() => _s3Client.Dispose();
 }

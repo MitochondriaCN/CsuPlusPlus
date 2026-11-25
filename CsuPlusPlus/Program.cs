@@ -9,6 +9,7 @@ using CsuPlusPlus.Services.Auth;
 using CsuPlusPlus.Services.College;
 using CsuPlusPlus.Services.Course;
 using CsuPlusPlus.Services.File;
+using CsuPlusPlus.Services.Release;
 using CsuPlusPlus.Services.Setting;
 using CsuPlusPlus.Services.University;
 using CsuPlusPlus.Services.UserProfile;
@@ -57,6 +58,7 @@ public class Program
         builder.Services.AddScoped<ISettingsService, JsonSettingsService>();
         builder.Services.AddScoped<IFileService, FileService>();
         builder.Services.AddScoped<ICourseService, CourseService>();
+        builder.Services.AddScoped<IReleaseService, ReleaseService>();
 
         // JWT
         var jwt = builder.Configuration
