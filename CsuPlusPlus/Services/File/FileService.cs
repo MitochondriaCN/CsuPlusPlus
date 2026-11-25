@@ -294,10 +294,10 @@ public class FileService(
             query = query.Where(cf => EF.Functions.Like(cf.File.FriendlyFilename, pattern));
         }
 
-        query = query.OrderBy(cf => cf.FileId);
-
         var totalCount = await query.LongCountAsync(cancellationToken);
         var items = await query
+            .OrderByDescending(cf => cf.File.CreatedAt)
+            .ThenBy(cf => cf.FileId)
             .Skip(pageRequest.Skip)
             .Take(pageRequest.PageSize)
             .Select(cf => new
