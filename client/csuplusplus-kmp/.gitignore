@@ -8,5 +8,6 @@ captures
 !**/module.xcodeproj/xcshareddata/
 !**/module.xcodeproj/project.xcworkspace/
 **/xcshareddata/WorkspaceSettings.xcsettings
+**/xcshareddata/xcschemes/app.xcscheme
 xcuserdata
 skills/
