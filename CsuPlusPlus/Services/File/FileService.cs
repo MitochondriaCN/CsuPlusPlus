@@ -4,18 +4,16 @@ using CsuPlusPlus.Dtos.Course;
 using CsuPlusPlus.Dtos.File;
 using CsuPlusPlus.Infra;
 using CsuPlusPlus.Models;
-using CsuPlusPlus.Options;
 using CsuPlusPlus.Services.Setting;
 using CsuPlusPlus.Settings;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace CsuPlusPlus.Services.File;
 
 public class FileService(
     AppDbContext db,
     ISettingsService settingsService,
-    IOptions<FileStorageOptions> fileStorageOptions) : IFileService
+    IFileStorage fileStorage) : IFileService
 {
     public async Task<GetFileMetadataResponse> GetFileMetadataAsync(long id, CancellationToken cancellationToken,
         long? universityId = null)
@@ -66,7 +64,7 @@ public class FileService(
         if (file == null)
             return new DownloadFileResponse(DownloadFileStatus.NotFound);
 
-        return OpenFile(file);
+        return CreateDownloadResponse(file);
     }
 
     public async Task<DownloadFileResponse> DownloadCourseFileAsync(long id, long universityId,
@@ -82,7 +80,7 @@ public class FileService(
         if (!sameUniversity)
             return new DownloadFileResponse(DownloadFileStatus.Forbidden);
 
-        return OpenFile(file);
+        return CreateDownloadResponse(file);
     }
 
     public async Task<BindCourseFileResponse> BindCourseFileAsync(long courseId, long fileId, long universityId,
@@ -183,17 +181,12 @@ public class FileService(
         db.Files.Remove(file);
         await db.SaveChangesAsync(cancellationToken);
 
-        var path = Path.Combine(fileStorageOptions.Value.RootPath,
-            file.GuidFilename.ToString("N") + file.Extension);
-        if (System.IO.File.Exists(path))
+        try
         {
-            try
-            {
-                System.IO.File.Delete(path);
-            }
-            catch (Exception)
-            {
-            }
+            await fileStorage.DeleteAsync(BuildObjectKey(file.GuidFilename, file.Extension), cancellationToken);
+        }
+        catch (Exception)
+        {
         }
 
         return new DeleteFileResponse(DeleteFileStatus.Success);
@@ -247,13 +240,11 @@ public class FileService(
             return new CreateFileResponse(CreateFileStatus.Duplicate,
                 (await GetFileMetadataAsync(existingFile.Id, cancellationToken)).Response);
 
-        // 落盘
+        // 上传对象存储
         var guidFileName = Guid.NewGuid();
-        Directory.CreateDirectory(fileStorageOptions.Value.RootPath);
-        var path = Path.Combine(fileStorageOptions.Value.RootPath, guidFileName.ToString("N") + extension);
-        await using (var targetFile = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        var objectKey = BuildObjectKey(guidFileName, extension);
         await using (var source = request.File.OpenReadStream())
-            await source.CopyToAsync(targetFile, cancellationToken);
+            await fileStorage.UploadAsync(objectKey, source, GetContentType(extension), cancellationToken);
 
         // 入库
         var file = new Models.File
@@ -275,7 +266,7 @@ public class FileService(
         }
         catch (DbUpdateException)
         {
-            System.IO.File.Delete(path);
+            await fileStorage.DeleteAsync(objectKey, CancellationToken.None);
             return new CreateFileResponse(CreateFileStatus.Duplicate, null);
         }
 
@@ -329,25 +320,22 @@ public class FileService(
             TotalCount: totalCount);
     }
 
-    private DownloadFileResponse OpenFile(Models.File file)
+    private DownloadFileResponse CreateDownloadResponse(Models.File file)
     {
-        var path = Path.Combine(fileStorageOptions.Value.RootPath,
-            file.GuidFilename.ToString("N") + file.Extension);
-        if (!System.IO.File.Exists(path))
-            return new DownloadFileResponse(DownloadFileStatus.ContentMissing);
-
-        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
-            64 * 1024, useAsync: true);
-        var downloadName = string.IsNullOrWhiteSpace(file.FriendlyFilename)
+        var objectKey = BuildObjectKey(file.GuidFilename, file.Extension);
+        var baseName = string.IsNullOrWhiteSpace(file.FriendlyFilename)
             ? file.GuidFilename.ToString("N")
             : Path.GetFileName(file.FriendlyFilename);
+        var downloadName = baseName + file.Extension;
+        var contentType = GetContentType(file.Extension);
 
         return new DownloadFileResponse(
             DownloadFileStatus.Success,
-            Content: stream,
-            ContentType: GetContentType(file.Extension),
-            DownloadName: downloadName + file.Extension);
+            fileStorage.CreatePresignedDownloadUrl(objectKey, downloadName, contentType));
     }
+
+    private static string BuildObjectKey(Guid guidFilename, string extension) =>
+        guidFilename.ToString("N") + extension;
 
     private static string GetContentType(string extension) =>
         extension switch

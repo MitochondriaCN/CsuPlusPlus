@@ -151,7 +151,7 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
     [Authorize(Policy = Policies.PlatformAdmin)]
     [EnableRateLimiting(RateLimitPolicies.FileDownload)]
     [HttpGet("download/{id:long}")]
-    public async Task<IActionResult> DownloadFile(
+    public async Task<ActionResult<DownloadFileUrlResponse>> DownloadFile(
         [FromRoute] long id,
         CancellationToken cancellationToken) =>
         MapDownloadResult(await fileService.DownloadFileAsync(id, cancellationToken));
@@ -159,7 +159,7 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
     [Authorize(Policy = Policies.AccessOwnUniversity)]
     [EnableRateLimiting(RateLimitPolicies.FileDownload)]
     [HttpGet("download/course/{id:long}")]
-    public async Task<IActionResult> DownloadCourseFile(
+    public async Task<ActionResult<DownloadFileUrlResponse>> DownloadCourseFile(
         [FromRoute] long id,
         CancellationToken cancellationToken)
     {
@@ -170,23 +170,17 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
             await fileService.DownloadCourseFileAsync(id, universityId, cancellationToken));
     }
 
-    private IActionResult MapDownloadResult(DownloadFileResponse result)
+    private ActionResult<DownloadFileUrlResponse> MapDownloadResult(DownloadFileResponse result)
     {
         return result.Status switch
         {
-            DownloadFileStatus.Success => File(
-                result.Content!,
-                result.ContentType!,
-                result.DownloadName!),
+            DownloadFileStatus.Success => Ok(result.Response),
             DownloadFileStatus.NotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "文件不存在。"),
             DownloadFileStatus.Forbidden => Problem(
                 statusCode: StatusCodes.Status403Forbidden,
                 title: "只能下载本校资料。"),
-            DownloadFileStatus.ContentMissing => Problem(
-                statusCode: StatusCodes.Status410Gone,
-                title: "文件内容已丢失。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
     }
