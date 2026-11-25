@@ -16,5 +16,6 @@ public enum CreateFileStatus
     CourseInOtherUniversity,
     Duplicate,
     DailyUploadLimitExceeded,
-    UserNotFound
+    UserNotFound,
+    StorageFailed
 }
