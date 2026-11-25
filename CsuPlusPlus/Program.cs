@@ -52,6 +52,7 @@ public class Program
         builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
         builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         builder.Services.AddScoped<IAuthService, MailPasswordAuthService>();
+        builder.Services.AddScoped<ICapabilityService, CapabilityService>();
         builder.Services.AddScoped<IUserProfileService, UserProfileService>();
         builder.Services.AddScoped<IUniversityService, UniversityService>();
         builder.Services.AddScoped<ICollegeService, CollegeService>();

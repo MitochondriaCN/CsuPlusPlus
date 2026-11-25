@@ -14,19 +14,26 @@ public class CourseController(ICourseService courseService, ICurrentUser current
     [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpGet("list")]
     public async Task<ActionResult<PagedResponse<CourseResponse>>> List(
+        [FromQuery] long? collegeId,
         [FromQuery] PageRequest request,
         CancellationToken cancellationToken)
     {
         if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.GetByUniversityAsync(universityId, request, cancellationToken);
+        var result = await courseService.GetByUniversityAsync(universityId, request, cancellationToken, collegeId);
         return result.Status switch
         {
             GetCourseStatus.Success => Ok(result.Response),
             GetCourseStatus.UniversityNotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "大学不存在。"),
+            GetCourseStatus.CollegeNotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "学院不存在。"),
+            GetCourseStatus.CollegeInOtherUniversity => Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "只能查询本校学院的课程。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
     }
