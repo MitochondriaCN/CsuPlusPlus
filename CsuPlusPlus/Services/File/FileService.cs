@@ -13,7 +13,8 @@ namespace CsuPlusPlus.Services.File;
 public class FileService(
     AppDbContext db,
     ISettingsService settingsService,
-    IFileStorage fileStorage) : IFileService
+    IFileStorage fileStorage,
+    ILogger<FileService> logger) : IFileService
 {
     public async Task<GetFileMetadataResponse> GetFileMetadataAsync(long id, CancellationToken cancellationToken,
         long? universityId = null)
@@ -243,8 +244,16 @@ public class FileService(
         // 上传对象存储
         var guidFileName = Guid.NewGuid();
         var objectKey = BuildObjectKey(guidFileName, extension);
-        await using (var source = request.File.OpenReadStream())
+        try
+        {
+            await using var source = request.File.OpenReadStream();
             await fileStorage.UploadAsync(objectKey, source, GetContentType(extension), cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "上传文件到对象存储失败：{ObjectKey}", objectKey);
+            return new CreateFileResponse(CreateFileStatus.StorageFailed, null);
+        }
 
         // 入库
         var file = new Models.File

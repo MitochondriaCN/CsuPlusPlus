@@ -144,6 +144,9 @@ public class FileController(IFileService fileService, ICurrentUser currentUser) 
             CreateFileStatus.UserNotFound => Problem(
                 statusCode: StatusCodes.Status401Unauthorized,
                 title: "用户不存在。"),
+            CreateFileStatus.StorageFailed => Problem(
+                statusCode: StatusCodes.Status502BadGateway,
+                title: "文件存储服务异常，请稍后重试。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
     }
