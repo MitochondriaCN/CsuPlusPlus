@@ -23,12 +23,12 @@ public class CourseService(AppDbContext db) : ICourseService
             c.UpdatedAt);
 
     public Task<GetCourseResponse> GetByUniversityAsync(long universityId, PageRequest request,
-        CancellationToken cancellationToken) =>
-        QueryByUniversityAsync(universityId, null, request, cancellationToken);
+        CancellationToken cancellationToken, long? collegeId = null) =>
+        QueryByUniversityAsync(universityId, null, collegeId, request, cancellationToken);
 
     public Task<GetCourseResponse> SearchAsync(long universityId, string? keyword, PageRequest request,
         CancellationToken cancellationToken) =>
-        QueryByUniversityAsync(universityId, keyword, request, cancellationToken);
+        QueryByUniversityAsync(universityId, keyword, null, request, cancellationToken);
 
     public async Task<GetCourseResponse> GetByCollegeAsync(long collegeId, PageRequest request,
         CancellationToken cancellationToken, long? universityId = null)
@@ -143,12 +143,28 @@ public class CourseService(AppDbContext db) : ICourseService
     }
 
     private async Task<GetCourseResponse> QueryByUniversityAsync(long universityId, string? keyword,
-        PageRequest request, CancellationToken cancellationToken)
+        long? collegeId, PageRequest request, CancellationToken cancellationToken)
     {
         if (!await db.Universities.AnyAsync(u => u.Id == universityId, cancellationToken))
             return new GetCourseResponse(GetCourseStatus.UniversityNotFound);
 
         var query = db.Courses.AsNoTracking().Where(c => c.University.Id == universityId);
+
+        if (collegeId is { } targetCollegeId)
+        {
+            var collegeUniversityId = await db.Colleges.AsNoTracking()
+                .Where(c => c.Id == targetCollegeId)
+                .Select(c => (long?)c.University.Id)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (collegeUniversityId is null)
+                return new GetCourseResponse(GetCourseStatus.CollegeNotFound);
+
+            if (collegeUniversityId != universityId)
+                return new GetCourseResponse(GetCourseStatus.CollegeInOtherUniversity);
+
+            query = query.Where(c => c.College != null && c.College.Id == targetCollegeId);
+        }
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {
