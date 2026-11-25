@@ -42,11 +42,12 @@ public class Program
 
         // Configure
         builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
-        builder.Services.Configure<FileStorageOptions>(
-            builder.Configuration.GetSection(FileStorageOptions.SectionName));
+        builder.Services.Configure<R2StorageOptions>(
+            builder.Configuration.GetSection(R2StorageOptions.SectionName));
 
         // Services
         builder.Services.AddHttpContextAccessor();
+        builder.Services.AddSingleton<IFileStorage, R2FileStorage>();
         builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
         builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         builder.Services.AddScoped<IAuthService, MailPasswordAuthService>();
