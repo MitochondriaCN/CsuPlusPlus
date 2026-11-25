@@ -42,6 +42,8 @@ enum class CourseFileType(val label: String) {
     PDF("PDF"),
     SLIDES("PPT"),
     ARCHIVE("ZIP"),
+    MARKDOWN("MD"),
+    IMAGE("IMAGE"),
     CODE("CODE"),
     OTHER("FILE"),
 }
@@ -52,6 +54,7 @@ data class CourseFile(
     val extension: String,
     val uploaderUserId: Long,
     val uploaderName: String,
+    val createdAt: String,
     val type: CourseFileType,
 )
 
@@ -75,6 +78,7 @@ data class CourseFileDeleteUiState(
 
 data class HomeUiState(
     val currentUserId: Long? = null,
+    val universityName: String? = null,
     val searchQuery: String = "",
     val activeSearchQuery: String = "",
     val courses: PagedState<CourseSummary> = PagedState(),
@@ -464,7 +468,12 @@ class HomeViewModel(
         profileJob?.cancel()
         profileJob = viewModelScope.launch {
             authApi.getMyProfile().onSuccess { profile ->
-                _uiState.update { it.copy(currentUserId = profile.id) }
+                _uiState.update {
+                    it.copy(
+                        currentUserId = profile.id,
+                        universityName = profile.universityName,
+                    )
+                }
             }
         }
     }
@@ -480,13 +489,20 @@ private fun CourseResponse.toSummary(): CourseSummary = CourseSummary(
     updatedAt = formatFriendlyTime(updatedAt),
 )
 
-private fun FileMetadataResponse.toCourseFile(): CourseFile {
+internal fun FileMetadataResponse.toCourseFile(): CourseFile =
+    toCourseFile(::formatFriendlyTime)
+
+internal fun FileMetadataResponse.toCourseFile(
+    formatTime: (String) -> String,
+): CourseFile {
     val ext = extension.trim().trimStart('.').lowercase()
     val type = when (ext) {
         "pdf" -> CourseFileType.PDF
         "ppt", "pptx", "key" -> CourseFileType.SLIDES
         "zip", "rar", "7z", "tar", "gz" -> CourseFileType.ARCHIVE
-        "kt", "java", "c", "cpp", "h", "hpp", "py", "js", "ts", "rs", "go", "md", "txt" -> CourseFileType.CODE
+        "md", "markdown" -> CourseFileType.MARKDOWN
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg" -> CourseFileType.IMAGE
+        "kt", "java", "c", "cpp", "h", "hpp", "py", "js", "ts", "rs", "go", "txt" -> CourseFileType.CODE
         else -> CourseFileType.OTHER
     }
     return CourseFile(
@@ -495,6 +511,7 @@ private fun FileMetadataResponse.toCourseFile(): CourseFile {
         extension = ext.uppercase(),
         uploaderUserId = uploaderUserId,
         uploaderName = uploaderUserNickname,
+        createdAt = formatTime(createdAt),
         type = type,
     )
 }

@@ -11,6 +11,7 @@ data class FileMetadataResponse(
     val sha256Hash: String,
     val uploaderUserId: Long,
     val uploaderUserNickname: String,
+    val createdAt: String,
 ) {
     val displayName: String
         get() = friendlyFilename?.takeIf { it.isNotBlank() } ?: guidFilename

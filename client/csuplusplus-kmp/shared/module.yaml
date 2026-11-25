@@ -25,6 +25,8 @@ dependencies:
   - $libs.koin.compose.viewmodel
   - $libs.ksafe
   - $libs.filekit.dialogs.compose
+  - $libs.coil.compose
+  - $libs.coil.network.ktor3
   - $ktor.client.core
   - $ktor.client.contentNegotiation
   - $ktor.serialization.kotlinx.json

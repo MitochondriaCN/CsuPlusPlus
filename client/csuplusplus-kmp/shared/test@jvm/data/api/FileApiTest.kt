@@ -85,4 +85,136 @@ class FileApiTest {
             server.stop(0)
         }
     }
+
+    @Test
+    fun getMetadataDecodesFileMetadataResponseWithCreatedAt() = runBlocking {
+        var lastMethod: String? = null
+        var lastPath: String? = null
+        var lastQuery: String? = null
+        val responseBody = """
+            {
+              "id": 7,
+              "guidFilename": "a1b2c3.pdf",
+              "friendlyFilename": "高数课件.pdf",
+              "extension": ".pdf",
+              "sha256Hash": "deadbeef",
+              "uploaderUserId": 1,
+              "uploaderUserNickname": "Tester",
+              "createdAt": "2026-11-25T08:00:00+08:00"
+            }
+        """.trimIndent()
+
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { exchange ->
+            lastMethod = exchange.requestMethod
+            lastPath = exchange.requestURI.path
+            lastQuery = exchange.requestURI.query
+            val bytes = responseBody.toByteArray(Charsets.UTF_8)
+            exchange.responseHeaders.add("Content-Type", "application/json; charset=utf-8")
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+            exchange.close()
+        }
+        server.start()
+
+        val json = Json {
+            ignoreUnknownKeys = true
+            coerceInputValues = true
+            encodeDefaults = true
+        }
+        val config = NetworkConfig(baseUrl = "http://127.0.0.1:${server.address.port}/api")
+        val client = HttpClient {
+            expectSuccess = false
+            install(ContentNegotiation) { json(json) }
+            install(DefaultRequest) {
+                url(config.normalizedBaseUrl)
+                accept(ContentType.Application.Json)
+            }
+        }
+        val fileApi = FileApi(ApiClient(client, json, config))
+
+        try {
+            val result = fileApi.getMetadata(7L)
+            assertTrue(result.isSuccess)
+            assertEquals("GET", lastMethod)
+            assertEquals("/api/file", lastPath)
+            assertEquals("id=7", lastQuery)
+            val metadata = result.getOrThrow()
+            assertEquals(7L, metadata.id)
+            assertEquals("高数课件.pdf", metadata.displayName)
+            assertEquals("2026-11-25T08:00:00+08:00", metadata.createdAt)
+        } finally {
+            client.close()
+            server.stop(0)
+        }
+    }
+
+    @Test
+    fun listCourseFilesDecodesPagedFileMetadataWithCreatedAt() = runBlocking {
+        var lastMethod: String? = null
+        var lastPath: String? = null
+        var lastQuery: String? = null
+        val responseBody = """
+            {
+              "items": [
+                {
+                  "id": 7,
+                  "guidFilename": "a1b2c3.pdf",
+                  "friendlyFilename": "高数课件.pdf",
+                  "extension": ".pdf",
+                  "sha256Hash": "deadbeef",
+                  "uploaderUserId": 1,
+                  "uploaderUserNickname": "Tester",
+                  "createdAt": "2026-11-25T08:00:00+08:00"
+                }
+              ],
+              "page": 1,
+              "pageSize": 20,
+              "totalCount": 1
+            }
+        """.trimIndent()
+
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { exchange ->
+            lastMethod = exchange.requestMethod
+            lastPath = exchange.requestURI.path
+            lastQuery = exchange.requestURI.query
+            val bytes = responseBody.toByteArray(Charsets.UTF_8)
+            exchange.responseHeaders.add("Content-Type", "application/json; charset=utf-8")
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+            exchange.close()
+        }
+        server.start()
+
+        val json = Json {
+            ignoreUnknownKeys = true
+            coerceInputValues = true
+            encodeDefaults = true
+        }
+        val config = NetworkConfig(baseUrl = "http://127.0.0.1:${server.address.port}/api")
+        val client = HttpClient {
+            expectSuccess = false
+            install(ContentNegotiation) { json(json) }
+            install(DefaultRequest) {
+                url(config.normalizedBaseUrl)
+                accept(ContentType.Application.Json)
+            }
+        }
+        val fileApi = FileApi(ApiClient(client, json, config))
+
+        try {
+            val result = fileApi.listCourseFiles(courseId = 3L)
+            assertTrue(result.isSuccess)
+            assertEquals("GET", lastMethod)
+            assertEquals("/api/file/list/course", lastPath)
+            assertTrue(lastQuery?.contains("courseId=3") == true)
+            val page = result.getOrThrow()
+            assertEquals(1, page.items.size)
+            assertEquals("2026-11-25T08:00:00+08:00", page.items.single().createdAt)
+        } finally {
+            client.close()
+            server.stop(0)
+        }
+    }
 }
