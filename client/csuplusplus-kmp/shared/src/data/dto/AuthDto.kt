@@ -33,3 +33,8 @@ data class LoginResponse(
     val expiresAt: String,
     val user: UserProfileDto,
 )
+
+@Serializable
+data class CapabilitiesResponse(
+    val capabilities: Map<String, Boolean> = emptyMap(),
+)

@@ -30,10 +30,26 @@ internal fun DeleteCourseFileDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    ConfirmDeleteDialog(
+        title = "删除文件",
+        message = "确定要删除「${file.name}」吗？删除后将无法恢复。",
+        isDeleting = isDeleting,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+    )
+}
+
+@Composable
+internal fun ConfirmDeleteDialog(
+    title: String,
+    message: String,
+    isDeleting: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    errorMessage: String? = null,
+) {
     AlertDialog(
-        onDismissRequest = {
-            if (!isDeleting) onDismiss()
-        },
+        onDismissRequest = { if (!isDeleting) onDismiss() },
         icon = {
             Icon(
                 imageVector = Lucide.Trash2,
@@ -41,8 +57,19 @@ internal fun DeleteCourseFileDialog(
                 tint = MaterialTheme.colorScheme.error,
             )
         },
-        title = { Text("删除文件") },
-        text = { Text("确定要删除「${file.name}」吗？删除后将无法恢复。") },
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(message)
+                errorMessage?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
         confirmButton = {
             TextButton(
                 onClick = onConfirm,

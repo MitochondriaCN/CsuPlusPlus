@@ -1,11 +1,13 @@
 package ink.qingshuige.csuplusplus.presentation.page.home
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -15,7 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,20 +25,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImagePainter
-import coil3.compose.rememberAsyncImagePainter
 import com.composables.icons.lucide.*
 import ink.qingshuige.csuplusplus.core.pagination.PagedState
 import ink.qingshuige.csuplusplus.presentation.component.PaginatedLazyColumn
@@ -44,12 +42,21 @@ import ink.qingshuige.csuplusplus.presentation.component.PaginatedLazyColumn
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CourseListPane(
-    universityName: String?,
+    scope: CourseScopeUiState,
+    fallbackUniversityName: String?,
     universityEmblem: Any? = null,
     searchQuery: String,
     activeSearchQuery: String,
     coursesState: PagedState<CourseSummary>,
     highlightedCourseId: Long?,
+    canCreateCourse: Boolean,
+    onSelectUniversity: (Long) -> Unit,
+    onSelectCollege: (Long?) -> Unit,
+    onCreateUniversityClick: () -> Unit,
+    onCreateCollegeClick: () -> Unit,
+    onCreateCourseClick: () -> Unit,
+    onRetryUniversities: () -> Unit,
+    onRetryColleges: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchSubmit: () -> Unit,
     onClearSearch: () -> Unit,
@@ -58,13 +65,15 @@ internal fun CourseListPane(
     onRetry: () -> Unit,
     onCourseClick: (CourseSummary) -> Unit,
 ) {
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val listState = rememberLazyListState()
+    val isListScrolled by remember { derivedStateOf { listState.canScrollBackward } }
     val focusManager = LocalFocusManager.current
     val searchFocusRequester = remember { FocusRequester() }
     var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
     var requestSearchFocus by remember { mutableStateOf(false) }
 
+    val displayedUniversityName = (scope.selectedUniversityName ?: fallbackUniversityName)
+        ?.takeIf { it.isNotBlank() }
     val isSearching = activeSearchQuery.isNotBlank()
     val subtitle = when {
         isSearching && coursesState.isFirstLoading -> "搜索课程中..."
@@ -81,229 +90,497 @@ internal fun CourseListPane(
         }
     }
 
-    LaunchedEffect(activeSearchQuery) {
+    LaunchedEffect(activeSearchQuery, scope.selectedCollegeId, scope.selectedUniversityId) {
         listState.scrollToItem(0)
     }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            AnimatedContent(
-                targetState = isSearchExpanded,
-                transitionSpec = {
-                    fadeIn(tween(180)) togetherWith fadeOut(tween(140))
-                },
-                label = "CourseListTopBar",
-            ) { expanded ->
-                if (expanded) {
-                    LaunchedEffect(requestSearchFocus) {
-                        if (requestSearchFocus) {
-                            searchFocusRequester.requestFocus()
-                            requestSearchFocus = false
-                        }
-                    }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isCompactHeader = maxWidth < 460.dp
+        val badgeMaxTextWidth = if (isCompactHeader) 140.dp else 180.dp
 
-                    TopAppBar(
-                        navigationIcon = {
-                            IconButton(
-                                onClick = {
-                                    focusManager.clearFocus()
-                                    requestSearchFocus = false
-                                    isSearchExpanded = false
-                                    onClearSearch()
-                                },
-                            ) {
-                                Icon(Lucide.ArrowLeft, contentDescription = "关闭搜索")
-                            }
-                        },
-                        title = {
-                            CourseSearchField(
-                                query = searchQuery,
-                                onQueryChange = onSearchQueryChange,
-                                onSearch = {
-                                    focusManager.clearFocus()
-                                    onSearchSubmit()
-                                },
-                                onClear = {
-                                    onClearSearch()
-                                    requestSearchFocus = true
-                                },
-                                focusRequester = searchFocusRequester,
-                                modifier = Modifier.padding(end = 12.dp),
-                            )
-                        },
-                        scrollBehavior = scrollBehavior,
-                    )
-                } else {
-                    TopAppBar(
-                        title = {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    text = "课程列表",
-                                    style = MaterialTheme.typography.titleLarge,
-                                )
-                                Text(
-                                    text = subtitle,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        },
-                        actions = {
-                            universityName?.takeIf { it.isNotBlank() }?.let { name ->
-                                UniversityBadge(
-                                    name = name,
-                                    emblem = universityEmblem,
-                                    modifier = Modifier.padding(end = 4.dp),
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    isSearchExpanded = true
-                                    requestSearchFocus = true
-                                },
-                            ) {
-                                Icon(Lucide.Search, contentDescription = "搜索课程")
-                            }
-                            IconButton(onClick = onRefresh) {
-                                Icon(Lucide.RefreshCw, contentDescription = "刷新课程")
-                            }
-                        },
-                        scrollBehavior = scrollBehavior,
-                    )
-                }
-            }
-        },
-    ) { innerPadding ->
-        PaginatedLazyColumn(
-            pagedState = coursesState,
-            onLoadMore = onLoadMore,
-            onRetry = onRetry,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            listState = listState,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            itemKey = { it.id },
-            emptyContent = {
-                if (isSearching) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text(
-                            text = "未找到与「$activeSearchQuery」相关的课程",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
-                        FilledTonalButton(
-                            onClick = {
-                                focusManager.clearFocus()
+        Scaffold(
+            topBar = {
+                AnimatedContent(
+                    targetState = isSearchExpanded,
+                    transitionSpec = {
+                        fadeIn(tween(180)) togetherWith fadeOut(tween(140))
+                    },
+                    label = "CourseListTopBar",
+                ) { expanded ->
+                    if (expanded) {
+                        LaunchedEffect(requestSearchFocus) {
+                            if (requestSearchFocus) {
+                                searchFocusRequester.requestFocus()
                                 requestSearchFocus = false
-                                isSearchExpanded = false
-                                onClearSearch()
-                            },
-                        ) {
-                            Text("查看全部课程")
+                            }
                         }
-                    }
-                } else {
-                    Text(
-                        text = "暂无课程",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            },
-        ) { course ->
-            CourseCard(
-                course = course,
-                isSelected = course.id == highlightedCourseId,
-                onClick = { onCourseClick(course) },
-            )
-        }
-    }
-}
 
-@Composable
-private fun UniversityBadge(
-    name: String,
-    emblem: Any? = null,
-    modifier: Modifier = Modifier,
-) {
-    val normalizedEmblem = if (emblem is String) emblem.trim().takeIf { it.isNotEmpty() } else emblem
-
-    Surface(
-        modifier = modifier,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 5.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            when (normalizedEmblem) {
-                null -> DefaultUniversityEmblem()
-                is Painter -> {
-                    Image(
-                        painter = normalizedEmblem,
-                        contentDescription = "校徽",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(26.dp)
-                            .clip(CircleShape),
-                    )
-                }
-
-                else -> {
-                    val painter = rememberAsyncImagePainter(model = normalizedEmblem)
-                    val state by painter.state.collectAsState()
-                    if (state is AsyncImagePainter.State.Success) {
-                        Image(
-                            painter = painter,
-                            contentDescription = "校徽",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape),
+                        TopAppBar(
+                            navigationIcon = {
+                                IconButton(
+                                    onClick = {
+                                        focusManager.clearFocus()
+                                        requestSearchFocus = false
+                                        isSearchExpanded = false
+                                        onClearSearch()
+                                    },
+                                ) {
+                                    Icon(Lucide.ArrowLeft, contentDescription = "关闭搜索")
+                                }
+                            },
+                            title = {
+                                CourseSearchField(
+                                    query = searchQuery,
+                                    onQueryChange = onSearchQueryChange,
+                                    onSearch = {
+                                        focusManager.clearFocus()
+                                        onSearchSubmit()
+                                    },
+                                    onClear = {
+                                        onClearSearch()
+                                        requestSearchFocus = true
+                                    },
+                                    focusRequester = searchFocusRequester,
+                                    modifier = Modifier.padding(end = 12.dp),
+                                )
+                            },
                         )
                     } else {
-                        DefaultUniversityEmblem()
+                        val topAppBarColors = TopAppBarDefaults.topAppBarColors()
+                        val headerContainerColor by animateColorAsState(
+                            targetValue = if (isListScrolled) {
+                                topAppBarColors.scrolledContainerColor
+                            } else {
+                                topAppBarColors.containerColor
+                            },
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            label = "CourseListHeaderColor",
+                        )
+                        Surface(color = headerContainerColor) {
+                            Column {
+                                TopAppBar(
+                                    title = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                text = "课程",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = subtitle,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    },
+                                    actions = {
+                                        if (canCreateCourse) {
+                                            IconButton(onClick = onCreateCourseClick) {
+                                                Icon(Lucide.Plus, contentDescription = "新建课程")
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                isSearchExpanded = true
+                                                requestSearchFocus = true
+                                            },
+                                        ) {
+                                            Icon(Lucide.Search, contentDescription = "搜索课程")
+                                        }
+                                        IconButton(onClick = onRefresh) {
+                                            Icon(Lucide.RefreshCw, contentDescription = "刷新课程")
+                                        }
+                                    },
+                                    colors = TopAppBarDefaults.topAppBarColors(
+                                        containerColor = Color.Transparent,
+                                        scrolledContainerColor = Color.Transparent,
+                                    ),
+                                )
+                                if (displayedUniversityName != null) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        UniversitySelectorBadge(
+                                            universityName = displayedUniversityName,
+                                            emblem = universityEmblem,
+                                            scope = scope,
+                                            compact = false,
+                                            maxTextWidth = badgeMaxTextWidth,
+                                            onSelectUniversity = onSelectUniversity,
+                                            onCreateUniversityClick = onCreateUniversityClick,
+                                            onRetryUniversities = onRetryUniversities,
+                                        )
+                                        CollegeSelectorBadge(
+                                            scope = scope,
+                                            compact = false,
+                                            maxTextWidth = badgeMaxTextWidth,
+                                            onSelectCollege = onSelectCollege,
+                                            onCreateCollegeClick = onCreateCollegeClick,
+                                            onRetryColleges = onRetryColleges,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
+            },
+        ) { innerPadding ->
+            PaginatedLazyColumn(
+                pagedState = coursesState,
+                onLoadMore = onLoadMore,
+                onRetry = onRetry,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                listState = listState,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                itemKey = { it.id },
+                emptyContent = {
+                    when {
+                        isSearching -> {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Text(
+                                    text = "未找到与「$activeSearchQuery」相关的课程",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                                FilledTonalButton(
+                                    onClick = {
+                                        focusManager.clearFocus()
+                                        requestSearchFocus = false
+                                        isSearchExpanded = false
+                                        onClearSearch()
+                                    },
+                                ) {
+                                    Text("查看全部课程")
+                                }
+                            }
+                        }
+
+                        scope.selectedCollegeId != null -> {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Text(
+                                    text = "「${scope.selectedCollegeName ?: "该学院"}」暂无课程",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                                FilledTonalButton(onClick = { onSelectCollege(null) }) {
+                                    Text("查看全部学院")
+                                }
+                            }
+                        }
+
+                        else -> {
+                            Text(
+                                text = "暂无课程",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                },
+            ) { course ->
+                CourseCard(
+                    course = course,
+                    isSelected = course.id == highlightedCourseId,
+                    onClick = { onCourseClick(course) },
+                )
             }
-            Text(
-                text = name,
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 120.dp),
-            )
         }
     }
 }
 
 @Composable
-private fun DefaultUniversityEmblem() {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-        modifier = Modifier.size(26.dp),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Lucide.GraduationCap,
-                contentDescription = "校徽",
-                modifier = Modifier.size(15.dp),
-            )
+private fun UniversitySelectorBadge(
+    universityName: String,
+    emblem: Any?,
+    scope: CourseScopeUiState,
+    compact: Boolean,
+    maxTextWidth: Dp,
+    onSelectUniversity: (Long) -> Unit,
+    onCreateUniversityClick: () -> Unit,
+    onRetryUniversities: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        ScopeSelectorBadge(
+            label = universityName,
+            fallbackIcon = Lucide.GraduationCap,
+            emblem = if (scope.isViewingOtherUniversity) null else emblem,
+            emblemContentDescription = "校徽",
+            maxTextWidth = maxTextWidth,
+            compact = compact,
+            onClick = if (scope.canSwitchUniversity) {
+                { expanded = true }
+            } else {
+                null
+            },
+        )
+
+        if (scope.canSwitchUniversity) {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.heightIn(max = 360.dp),
+            ) {
+                when {
+                    scope.isLoadingUniversities && scope.universities.isEmpty() -> {
+                        DropdownMenuItem(
+                            text = { Text("加载大学列表中...") },
+                            leadingIcon = {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            },
+                            enabled = false,
+                            onClick = {},
+                        )
+                    }
+
+                    scope.universitiesError != null && scope.universities.isEmpty() -> {
+                        DropdownMenuItem(
+                            text = { Text("加载失败，点击重试") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Lucide.RefreshCw,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
+                            onClick = onRetryUniversities,
+                        )
+                    }
+
+                    scope.universities.isEmpty() -> {
+                        DropdownMenuItem(
+                            text = { Text("暂无可选大学") },
+                            enabled = false,
+                            onClick = {},
+                        )
+                    }
+
+                    else -> {
+                        scope.universities.forEach { university ->
+                            val selected = university.id == scope.selectedUniversityId
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = university.name,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
+                                trailingIcon = if (selected) {
+                                    {
+                                        Icon(
+                                            imageVector = Lucide.Check,
+                                            contentDescription = "已选中",
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                                onClick = {
+                                    expanded = false
+                                    onSelectUniversity(university.id)
+                                },
+                            )
+                        }
+                    }
+                }
+
+                AddScopeMenuItem(
+                    label = "新建大学",
+                    onClick = {
+                        expanded = false
+                        onCreateUniversityClick()
+                    },
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun CollegeSelectorBadge(
+    scope: CourseScopeUiState,
+    compact: Boolean,
+    maxTextWidth: Dp,
+    onSelectCollege: (Long?) -> Unit,
+    onCreateCollegeClick: () -> Unit,
+    onRetryColleges: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val canSelectCollege = scope.selectedUniversityId != null
+
+    Box {
+        ScopeSelectorBadge(
+            label = scope.selectedCollegeName ?: "全部学院",
+            fallbackIcon = Lucide.Building2,
+            emblemContentDescription = "学院",
+            maxTextWidth = maxTextWidth,
+            compact = compact,
+            onClick = if (canSelectCollege) {
+                { expanded = true }
+            } else {
+                null
+            },
+        )
+
+        if (canSelectCollege) {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.heightIn(max = 360.dp),
+            ) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "全部学院",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    trailingIcon = if (scope.selectedCollegeId == null) {
+                        {
+                            Icon(
+                                imageVector = Lucide.Check,
+                                contentDescription = "已选中",
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelectCollege(null)
+                    },
+                )
+
+                HorizontalDivider()
+
+                when {
+                    scope.isLoadingColleges && scope.colleges.isEmpty() -> {
+                        DropdownMenuItem(
+                            text = { Text("加载学院列表中...") },
+                            leadingIcon = {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            },
+                            enabled = false,
+                            onClick = {},
+                        )
+                    }
+
+                    scope.collegesError != null && scope.colleges.isEmpty() -> {
+                        DropdownMenuItem(
+                            text = { Text("加载失败，点击重试") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Lucide.RefreshCw,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
+                            onClick = onRetryColleges,
+                        )
+                    }
+
+                    scope.colleges.isEmpty() -> {
+                        DropdownMenuItem(
+                            text = { Text("该校暂无学院") },
+                            enabled = false,
+                            onClick = {},
+                        )
+                    }
+
+                    else -> {
+                        scope.colleges.forEach { college ->
+                            val selected = college.id == scope.selectedCollegeId
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = college.name,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
+                                trailingIcon = if (selected) {
+                                    {
+                                        Icon(
+                                            imageVector = Lucide.Check,
+                                            contentDescription = "已选中",
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                                onClick = {
+                                    expanded = false
+                                    onSelectCollege(college.id)
+                                },
+                            )
+                        }
+                    }
+                }
+
+                if (scope.canSwitchUniversity) {
+                    AddScopeMenuItem(
+                        label = "新建学院",
+                        onClick = {
+                            expanded = false
+                            onCreateCollegeClick()
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddScopeMenuItem(
+    label: String,
+    onClick: () -> Unit,
+) {
+    HorizontalDivider()
+    DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = {
+            Icon(
+                imageVector = Lucide.Plus,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+            )
+        },
+        onClick = onClick,
+    )
 }
 
 @Composable

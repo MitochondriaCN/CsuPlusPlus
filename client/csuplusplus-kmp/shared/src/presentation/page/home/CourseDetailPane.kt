@@ -21,12 +21,15 @@ internal fun CourseDetailPane(
     detailState: CourseDetailUiState,
     filesState: PagedState<CourseFile>,
     currentUserId: Long?,
+    canDeleteAnyFile: Boolean,
+    canDeleteCourse: Boolean,
     downloadingFileIds: Set<Long>,
     isUploadingFile: Boolean,
     showBackButton: Boolean,
     snackbarHostState: SnackbarHostState,
     onBackClick: () -> Unit,
     onUploadClick: () -> Unit,
+    onDeleteCourseClick: (CourseSummary) -> Unit,
     onRetryDetail: () -> Unit,
     onLoadMoreFiles: () -> Unit,
     onRetryFiles: () -> Unit,
@@ -59,6 +62,17 @@ internal fun CourseDetailPane(
                     if (showBackButton) {
                         IconButton(onClick = onBackClick) {
                             Icon(Lucide.ArrowLeft, contentDescription = "返回课程列表")
+                        }
+                    }
+                },
+                actions = {
+                    if (detailState is CourseDetailUiState.Success && canDeleteCourse) {
+                        IconButton(onClick = { onDeleteCourseClick(detailState.course) }) {
+                            Icon(
+                                imageVector = Lucide.Trash2,
+                                contentDescription = "删除课程",
+                                tint = MaterialTheme.colorScheme.error,
+                            )
                         }
                     }
                 },
@@ -130,6 +144,7 @@ internal fun CourseDetailPane(
                         course = detailState.course,
                         filesState = filesState,
                         currentUserId = currentUserId,
+                        canDeleteAnyFile = canDeleteAnyFile,
                         downloadingFileIds = downloadingFileIds,
                         modifier = Modifier
                             .widthIn(max = 760.dp)
@@ -186,6 +201,7 @@ private fun CourseDetailContent(
     course: CourseSummary,
     filesState: PagedState<CourseFile>,
     currentUserId: Long?,
+    canDeleteAnyFile: Boolean,
     downloadingFileIds: Set<Long>,
     modifier: Modifier = Modifier,
     onLoadMoreFiles: () -> Unit,
@@ -304,7 +320,7 @@ private fun CourseDetailContent(
         CourseFileItem(
             file = file,
             isDownloading = file.id in downloadingFileIds,
-            canDelete = currentUserId != null && file.uploaderUserId == currentUserId,
+            canDelete = canDeleteAnyFile || (currentUserId != null && file.uploaderUserId == currentUserId),
             onClick = { onFileClick(file) },
             onDeleteClick = { onDeleteFileClick(file) },
         )
