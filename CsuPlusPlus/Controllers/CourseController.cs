@@ -21,22 +21,21 @@ public class CourseController(ICourseService courseService, ICurrentUser current
         if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.GetByUniversityAsync(universityId, request, cancellationToken, collegeId);
-        return result.Status switch
-        {
-            GetCourseStatus.Success => Ok(result.Response),
-            GetCourseStatus.UniversityNotFound => Problem(
-                statusCode: StatusCodes.Status404NotFound,
-                title: "大学不存在。"),
-            GetCourseStatus.CollegeNotFound => Problem(
-                statusCode: StatusCodes.Status404NotFound,
-                title: "学院不存在。"),
-            GetCourseStatus.CollegeInOtherUniversity => Problem(
-                statusCode: StatusCodes.Status403Forbidden,
-                title: "只能查询本校学院的课程。"),
-            _ => throw new InvalidOperationException("未知结果。")
-        };
+        return MapGetCoursesResult(
+            await courseService.ListAsync(request, cancellationToken, universityId, collegeId));
     }
+
+    [Authorize(Policy = Policies.PlatformAdmin)]
+    [HttpGet("list/any")]
+    public async Task<ActionResult<PagedResponse<CourseResponse>>> ListAny(
+        [FromQuery] long? universityId,
+        [FromQuery] long? collegeId,
+        [FromQuery] string? keyword,
+        [FromQuery] PageRequest request,
+        CancellationToken cancellationToken) =>
+        MapGetCoursesResult(
+            await courseService.ListAsync(request, cancellationToken, universityId, collegeId, keyword),
+            scopedToOwnUniversity: false);
 
     [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpGet("search")]
@@ -48,15 +47,8 @@ public class CourseController(ICourseService courseService, ICurrentUser current
         if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.SearchAsync(universityId, keyword, request, cancellationToken);
-        return result.Status switch
-        {
-            GetCourseStatus.Success => Ok(result.Response),
-            GetCourseStatus.UniversityNotFound => Problem(
-                statusCode: StatusCodes.Status404NotFound,
-                title: "大学不存在。"),
-            _ => throw new InvalidOperationException("未知结果。")
-        };
+        return MapGetCoursesResult(
+            await courseService.ListAsync(request, cancellationToken, universityId, keyword: keyword));
     }
 
     [Authorize(Policy = Policies.AccessOwnUniversity)]
@@ -69,19 +61,31 @@ public class CourseController(ICourseService courseService, ICurrentUser current
         if (currentUser.UniversityId is not { } universityId)
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "用户身份无效。");
 
-        var result = await courseService.GetByCollegeAsync(collegeId, request, cancellationToken, universityId);
-        return result.Status switch
+        return MapGetCoursesResult(
+            await courseService.ListAsync(request, cancellationToken, universityId, collegeId));
+    }
+
+    private ActionResult<PagedResponse<CourseResponse>> MapGetCoursesResult(
+        GetCourseResponse result,
+        bool scopedToOwnUniversity = true) =>
+        result.Status switch
         {
             GetCourseStatus.Success => Ok(result.Response),
+            GetCourseStatus.UniversityNotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "大学不存在。"),
             GetCourseStatus.CollegeNotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "学院不存在。"),
-            GetCourseStatus.CollegeInOtherUniversity => Problem(
-                statusCode: StatusCodes.Status403Forbidden,
-                title: "只能查询本校学院的课程。"),
+            GetCourseStatus.CollegeInOtherUniversity => scopedToOwnUniversity
+                ? Problem(
+                    statusCode: StatusCodes.Status403Forbidden,
+                    title: "只能查询本校学院的课程。")
+                : Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "学院不属于该大学。"),
             _ => throw new InvalidOperationException("未知结果。")
         };
-    }
 
     [Authorize(Policy = Policies.AccessOwnUniversity)]
     [HttpGet("{id:long}")]
