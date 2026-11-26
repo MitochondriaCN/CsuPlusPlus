@@ -8,14 +8,20 @@ import ink.qingshuige.csuplusplus.core.network.TokenProvider
 import ink.qingshuige.csuplusplus.core.network.userMessage
 import ink.qingshuige.csuplusplus.core.pagination.PagedState
 import ink.qingshuige.csuplusplus.core.pagination.Paginator
+import ink.qingshuige.csuplusplus.core.pagination.fetchAllPages
 import ink.qingshuige.csuplusplus.core.pagination.mapItems
+import ink.qingshuige.csuplusplus.core.session.SessionState
+import ink.qingshuige.csuplusplus.core.session.SessionStore
 import ink.qingshuige.csuplusplus.core.time.formatFriendlyTime
-import ink.qingshuige.csuplusplus.data.api.AuthApi
+import ink.qingshuige.csuplusplus.data.api.CollegeApi
 import ink.qingshuige.csuplusplus.data.api.CourseApi
 import ink.qingshuige.csuplusplus.data.api.FileApi
+import ink.qingshuige.csuplusplus.data.api.UniversityApi
+import ink.qingshuige.csuplusplus.data.dto.CollegeResponse
 import ink.qingshuige.csuplusplus.data.dto.CourseResponse
 import ink.qingshuige.csuplusplus.data.dto.FileMetadataResponse
 import ink.qingshuige.csuplusplus.data.dto.PagedResponse
+import ink.qingshuige.csuplusplus.data.dto.UniversityResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -76,9 +82,30 @@ data class CourseFileDeleteUiState(
     val isDeleting: Boolean = false,
 )
 
+data class CourseScopeUiState(
+    val homeUniversityId: Long? = null,
+    val homeUniversityName: String? = null,
+    val canSwitchUniversity: Boolean = false,
+    val universities: List<UniversityResponse> = emptyList(),
+    val isLoadingUniversities: Boolean = false,
+    val universitiesError: String? = null,
+    val selectedUniversityId: Long? = null,
+    val selectedUniversityName: String? = null,
+    val colleges: List<CollegeResponse> = emptyList(),
+    val isLoadingColleges: Boolean = false,
+    val collegesError: String? = null,
+    val selectedCollegeId: Long? = null,
+    val selectedCollegeName: String? = null,
+) {
+    val isViewingOtherUniversity: Boolean
+        get() = selectedUniversityId != null &&
+                homeUniversityId != null &&
+                selectedUniversityId != homeUniversityId
+}
+
 data class HomeUiState(
     val currentUserId: Long? = null,
-    val universityName: String? = null,
+    val scope: CourseScopeUiState = CourseScopeUiState(),
     val searchQuery: String = "",
     val activeSearchQuery: String = "",
     val courses: PagedState<CourseSummary> = PagedState(),
@@ -93,7 +120,9 @@ data class HomeUiState(
 class HomeViewModel(
     private val courseApi: CourseApi,
     private val fileApi: FileApi,
-    private val authApi: AuthApi,
+    private val universityApi: UniversityApi,
+    private val collegeApi: CollegeApi,
+    private val sessionStore: SessionStore,
     private val tokenProvider: TokenProvider,
 ) : ViewModel() {
 
@@ -104,9 +133,12 @@ class HomeViewModel(
     val messages = _messages.receiveAsFlow()
 
     private var detailJob: Job? = null
-    private var profileJob: Job? = null
+    private var collegeJob: Job? = null
+    private var universityJob: Job? = null
     private var searchDebounceJob: Job? = null
     private var activeDetailCourseId: Long? = null
+    private var loadedCollegesUniversityId: Long? = null
+    private var hasLoadedUniversities: Boolean = false
 
     private val coursePaginator = Paginator(
         scope = viewModelScope,
@@ -114,14 +146,26 @@ class HomeViewModel(
             _uiState.update { it.copy(courses = paged) }
         },
         fetchPage = { query ->
-            val keyword = _uiState.value.activeSearchQuery
-            val result = if (keyword.isBlank()) {
-                courseApi.list(query)
+            val state = _uiState.value
+            if (state.scope.isViewingOtherUniversity) {
+                Result.success(
+                    PagedResponse(
+                        items = emptyList(),
+                        page = 1,
+                        pageSize = query.pageSize,
+                        totalCount = 0,
+                    ),
+                )
             } else {
-                courseApi.search(keyword = keyword, query = query)
-            }
-            result.map { resp ->
-                resp.mapItems(CourseResponse::toSummary)
+                val keyword = state.activeSearchQuery
+                val result = if (keyword.isBlank()) {
+                    courseApi.list(collegeId = state.scope.selectedCollegeId, query = query)
+                } else {
+                    courseApi.search(keyword = keyword, query = query)
+                }
+                result.map { resp ->
+                    resp.mapItems(CourseResponse::toSummary)
+                }
             }
         },
         getKey = { it.id.toString() },
@@ -151,22 +195,91 @@ class HomeViewModel(
 
     init {
         viewModelScope.launch {
-            tokenProvider.tokenFlow
-                .collect { token ->
-                    detailJob?.cancel()
-                    profileJob?.cancel()
-                    searchDebounceJob?.cancel()
-                    activeDetailCourseId = null
-                    _uiState.value = HomeUiState()
-                    if (token != null) {
-                        loadCurrentUser()
-                        coursePaginator.refresh(clearItems = true)
-                    }
+            tokenProvider.tokenFlow.collect { token ->
+                detailJob?.cancel()
+                collegeJob?.cancel()
+                universityJob?.cancel()
+                searchDebounceJob?.cancel()
+                activeDetailCourseId = null
+                loadedCollegesUniversityId = null
+                hasLoadedUniversities = false
+                _uiState.value = HomeUiState()
+                if (token != null) {
+                    syncSession(sessionStore.state.value)
+                    coursePaginator.refresh(clearItems = true)
                 }
+            }
+        }
+        viewModelScope.launch {
+            sessionStore.state.collect { session ->
+                if (tokenProvider.getToken() != null) {
+                    syncSession(session)
+                }
+            }
         }
     }
 
+    fun selectCollege(collegeId: Long?) {
+        val current = _uiState.value
+        if (current.scope.selectedUniversityId == null) return
+        if (current.scope.selectedCollegeId == collegeId &&
+            current.activeSearchQuery.isBlank() &&
+            current.courses.errorMessage == null
+        ) {
+            return
+        }
+
+        searchDebounceJob?.cancel()
+        val collegeName = collegeId?.let { id ->
+            current.scope.colleges.find { it.id == id }?.name
+        }
+        _uiState.update {
+            it.copy(
+                searchQuery = "",
+                activeSearchQuery = "",
+                scope = it.scope.copy(
+                    selectedCollegeId = collegeId,
+                    selectedCollegeName = collegeName,
+                ),
+            )
+        }
+        if (!current.scope.isViewingOtherUniversity) {
+            coursePaginator.refresh(clearItems = true)
+        }
+    }
+
+    fun selectUniversity(universityId: Long) {
+        val current = _uiState.value
+        if (!current.scope.canSwitchUniversity) return
+        if (current.scope.selectedUniversityId == universityId) return
+
+        val targetName = current.scope.universities.find { it.id == universityId }?.name
+            ?: current.scope.homeUniversityName?.takeIf { current.scope.homeUniversityId == universityId }
+
+        applyUniversitySwitch(universityId = universityId, universityName = targetName)
+    }
+
+    fun switchBackToHomeUniversity() {
+        val homeId = _uiState.value.scope.homeUniversityId ?: return
+        val homeName = _uiState.value.scope.homeUniversityName
+        if (_uiState.value.scope.selectedUniversityId == homeId) return
+        applyUniversitySwitch(universityId = homeId, universityName = homeName)
+    }
+
+    fun retryUniversities() {
+        if (!_uiState.value.scope.canSwitchUniversity) return
+        hasLoadedUniversities = false
+        loadUniversities()
+    }
+
+    fun retryColleges() {
+        val universityId = _uiState.value.scope.selectedUniversityId ?: return
+        loadedCollegesUniversityId = null
+        loadColleges(universityId)
+    }
+
     fun onSearchQueryChange(query: String) {
+        if (_uiState.value.scope.isViewingOtherUniversity) return
         _uiState.update { it.copy(searchQuery = query) }
         val normalized = query.trim()
         searchDebounceJob?.cancel()
@@ -180,6 +293,7 @@ class HomeViewModel(
     }
 
     fun submitSearch() {
+        if (_uiState.value.scope.isViewingOtherUniversity) return
         searchDebounceJob?.cancel()
         val normalized = _uiState.value.searchQuery.trim()
         if (normalized != _uiState.value.activeSearchQuery || _uiState.value.courses.errorMessage != null) {
@@ -191,12 +305,13 @@ class HomeViewModel(
         searchDebounceJob?.cancel()
         val hadActiveQuery = _uiState.value.activeSearchQuery.isNotEmpty()
         _uiState.update { it.copy(searchQuery = "", activeSearchQuery = "") }
-        if (hadActiveQuery) {
+        if (hadActiveQuery && !_uiState.value.scope.isViewingOtherUniversity) {
             coursePaginator.refresh(clearItems = true)
         }
     }
 
     private fun executeSearch(normalizedQuery: String) {
+        if (_uiState.value.scope.isViewingOtherUniversity) return
         if (_uiState.value.activeSearchQuery == normalizedQuery &&
             _uiState.value.courses.errorMessage == null &&
             _uiState.value.courses.page > 0
@@ -208,14 +323,27 @@ class HomeViewModel(
     }
 
     fun refreshCourses() {
+        val scope = _uiState.value.scope
+        if (scope.selectedUniversityId != null && scope.collegesError != null) {
+            retryColleges()
+        }
+        if (scope.isViewingOtherUniversity) {
+            scope.selectedUniversityId?.let {
+                loadedCollegesUniversityId = null
+                loadColleges(it)
+            }
+            return
+        }
         coursePaginator.refresh()
     }
 
     fun loadMoreCourses() {
+        if (_uiState.value.scope.isViewingOtherUniversity) return
         coursePaginator.loadNextPage()
     }
 
     fun retryCourses() {
+        if (_uiState.value.scope.isViewingOtherUniversity) return
         coursePaginator.retry()
     }
 
@@ -229,9 +357,7 @@ class HomeViewModel(
 
     fun selectCourse(courseId: Long) {
         val currentState = _uiState.value
-        if (currentState.currentUserId == null && profileJob?.isActive != true) {
-            loadCurrentUser()
-        }
+        ensureSessionLoaded()
         if (currentState.selectedCourseId == courseId &&
             currentState.detailState is CourseDetailUiState.Success
         ) {
@@ -279,9 +405,7 @@ class HomeViewModel(
 
     fun retryDetail() {
         val courseId = _uiState.value.selectedCourseId ?: return
-        if (_uiState.value.currentUserId == null && profileJob?.isActive != true) {
-            loadCurrentUser()
-        }
+        ensureSessionLoaded()
         _uiState.update { it.copy(detailState = CourseDetailUiState.Loading) }
         activeDetailCourseId = courseId
         filePaginator.refresh(clearItems = true)
@@ -468,17 +592,198 @@ class HomeViewModel(
         }
     }
 
-    private fun loadCurrentUser() {
-        if (tokenProvider.getToken() == null) return
-        profileJob?.cancel()
-        profileJob = viewModelScope.launch {
-            authApi.getMyProfile().onSuccess { profile ->
-                _uiState.update {
-                    it.copy(
-                        currentUserId = profile.id,
-                        universityName = profile.universityName,
-                    )
-                }
+    private fun syncSession(session: SessionState) {
+        val profile = session.profile
+        val canSwitch = session.capabilities.platformAdmin
+        var shouldSnapBackToHome = false
+
+        _uiState.update { state ->
+            val currentScope = state.scope
+            val homeId = profile?.universityId ?: currentScope.homeUniversityId
+            val homeName = profile?.universityName ?: currentScope.homeUniversityName
+
+            val nextSelectedUniversityId = when {
+                !canSwitch && homeId != null -> homeId
+                currentScope.selectedUniversityId != null -> currentScope.selectedUniversityId
+                else -> homeId
+            }
+            val nextSelectedUniversityName = when {
+                nextSelectedUniversityId == null -> null
+                nextSelectedUniversityId == homeId -> homeName
+                else -> currentScope.universities.find { it.id == nextSelectedUniversityId }?.name
+                    ?: currentScope.selectedUniversityName
+            }
+
+            shouldSnapBackToHome = currentScope.selectedUniversityId != null &&
+                    nextSelectedUniversityId != currentScope.selectedUniversityId
+
+            state.copy(
+                currentUserId = profile?.id ?: state.currentUserId,
+                scope = currentScope.copy(
+                    homeUniversityId = homeId,
+                    homeUniversityName = homeName,
+                    canSwitchUniversity = canSwitch,
+                    selectedUniversityId = nextSelectedUniversityId,
+                    selectedUniversityName = nextSelectedUniversityName,
+                    colleges = if (shouldSnapBackToHome) emptyList() else currentScope.colleges,
+                    collegesError = if (shouldSnapBackToHome) null else currentScope.collegesError,
+                    selectedCollegeId = if (shouldSnapBackToHome) null else currentScope.selectedCollegeId,
+                    selectedCollegeName = if (shouldSnapBackToHome) null else currentScope.selectedCollegeName,
+                ),
+            )
+        }
+
+        if (shouldSnapBackToHome) {
+            loadedCollegesUniversityId = null
+            coursePaginator.refresh(clearItems = true)
+        }
+
+        val targetUniversityId = _uiState.value.scope.selectedUniversityId
+        if (targetUniversityId != null &&
+            loadedCollegesUniversityId != targetUniversityId &&
+            collegeJob?.isActive != true
+        ) {
+            loadColleges(targetUniversityId)
+        }
+
+        if (canSwitch && !hasLoadedUniversities && universityJob?.isActive != true) {
+            loadUniversities()
+        }
+    }
+
+    private fun applyUniversitySwitch(universityId: Long, universityName: String?) {
+        searchDebounceJob?.cancel()
+        collegeJob?.cancel()
+        detailJob?.cancel()
+        activeDetailCourseId = null
+        loadedCollegesUniversityId = null
+
+        _uiState.update {
+            it.copy(
+                searchQuery = "",
+                activeSearchQuery = "",
+                selectedCourseId = null,
+                detailState = CourseDetailUiState.Empty,
+                files = PagedState(),
+                scope = it.scope.copy(
+                    selectedUniversityId = universityId,
+                    selectedUniversityName = universityName,
+                    colleges = emptyList(),
+                    isLoadingColleges = false,
+                    collegesError = null,
+                    selectedCollegeId = null,
+                    selectedCollegeName = null,
+                ),
+            )
+        }
+
+        loadColleges(universityId)
+
+        if (_uiState.value.scope.isViewingOtherUniversity) {
+            coursePaginator.clear()
+        } else {
+            coursePaginator.refresh(clearItems = true)
+        }
+    }
+
+    private fun loadUniversities() {
+        universityJob?.cancel()
+        universityJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    scope = it.scope.copy(
+                        isLoadingUniversities = true,
+                        universitiesError = null,
+                    ),
+                )
+            }
+
+            fetchAllPages { query -> universityApi.list(query) }.fold(
+                onSuccess = { list ->
+                    hasLoadedUniversities = true
+                    _uiState.update { state ->
+                        val selectedId = state.scope.selectedUniversityId
+                        val resolvedName = selectedId?.let { id ->
+                            list.find { it.id == id }?.name ?: state.scope.selectedUniversityName
+                        }
+                        state.copy(
+                            scope = state.scope.copy(
+                                universities = list,
+                                isLoadingUniversities = false,
+                                universitiesError = null,
+                                selectedUniversityName = resolvedName,
+                            ),
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    if (error is CancellationException) throw error
+                    _uiState.update {
+                        it.copy(
+                            scope = it.scope.copy(
+                                isLoadingUniversities = false,
+                                universitiesError = error.userMessage,
+                            ),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    private fun loadColleges(universityId: Long) {
+        collegeJob?.cancel()
+        collegeJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    scope = it.scope.copy(
+                        isLoadingColleges = true,
+                        collegesError = null,
+                    ),
+                )
+            }
+
+            fetchAllPages { query -> collegeApi.list(universityId, query) }.fold(
+                onSuccess = { list ->
+                    if (_uiState.value.scope.selectedUniversityId != universityId) return@fold
+                    loadedCollegesUniversityId = universityId
+                    _uiState.update { state ->
+                        val selectedCollegeId = state.scope.selectedCollegeId
+                        val resolvedCollege = selectedCollegeId?.let { id ->
+                            list.find { it.id == id }
+                        }
+                        state.copy(
+                            scope = state.scope.copy(
+                                colleges = list,
+                                isLoadingColleges = false,
+                                collegesError = null,
+                                selectedCollegeId = resolvedCollege?.id,
+                                selectedCollegeName = resolvedCollege?.name,
+                            ),
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    if (error is CancellationException) throw error
+                    if (_uiState.value.scope.selectedUniversityId != universityId) return@fold
+                    _uiState.update {
+                        it.copy(
+                            scope = it.scope.copy(
+                                isLoadingColleges = false,
+                                collegesError = error.userMessage,
+                            ),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    private fun ensureSessionLoaded() {
+        val session = sessionStore.state.value
+        if (session.profile == null && !session.isLoading && tokenProvider.getToken() != null) {
+            viewModelScope.launch {
+                sessionStore.refresh()
             }
         }
     }

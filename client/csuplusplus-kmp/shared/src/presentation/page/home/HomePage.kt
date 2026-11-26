@@ -58,14 +58,19 @@ fun HomePage(
         listPane = {
             AnimatedPane {
                 CourseListPane(
-                    universityName = uiState.universityName
-                        ?: uiState.courses.items.firstOrNull()?.universityName,
+                    scope = uiState.scope,
+                    fallbackUniversityName = uiState.courses.items.firstOrNull()?.universityName,
                     universityEmblem = universityEmblem,
                     searchQuery = uiState.searchQuery,
                     activeSearchQuery = uiState.activeSearchQuery,
                     coursesState = uiState.courses,
                     // 仅在双栏同时可见时高亮选中卡片
                     highlightedCourseId = if (isDualPane) uiState.selectedCourseId else null,
+                    onSelectUniversity = viewModel::selectUniversity,
+                    onSelectCollege = viewModel::selectCollege,
+                    onSwitchBackToHomeUniversity = viewModel::switchBackToHomeUniversity,
+                    onRetryUniversities = viewModel::retryUniversities,
+                    onRetryColleges = viewModel::retryColleges,
                     onSearchQueryChange = viewModel::onSearchQueryChange,
                     onSearchSubmit = viewModel::submitSearch,
                     onClearSearch = viewModel::clearSearch,

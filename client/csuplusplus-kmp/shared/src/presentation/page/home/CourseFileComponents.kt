@@ -151,6 +151,6 @@ internal fun formatCourseFileSubtitle(
     createdAt: String,
 ): String = buildList {
     add(typeLabel)
-    uploaderName.trim().takeIf { it.isNotEmpty() }?.let { add("上传者 $it") }
+    uploaderName.trim().takeIf { it.isNotEmpty() }?.let { add(it) }
     createdAt.trim().takeIf { it.isNotEmpty() }?.let(::add)
 }.joinToString(" · ")

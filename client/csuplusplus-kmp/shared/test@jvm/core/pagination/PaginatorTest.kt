@@ -39,5 +39,31 @@ class PaginatorTest {
         paginator.removeItems { it == 999 }
         assertEquals(listOf(1, 3), latestState.items)
         assertEquals(4L, latestState.totalCount)
+
+        paginator.clear()
+        assertEquals(emptyList(), latestState.items)
+        assertEquals(0, latestState.page)
+        assertEquals(0L, latestState.totalCount)
+    }
+
+    @Test
+    fun fetchAllPagesCollectsAcrossMultiplePages() = runBlocking {
+        val result = fetchAllPages(pageSize = 2) { query ->
+            val items = when (query.page) {
+                1 -> listOf("a", "b")
+                2 -> listOf("c")
+                else -> emptyList()
+            }
+            Result.success(
+                PagedResponse(
+                    items = items,
+                    page = query.page,
+                    pageSize = query.pageSize,
+                    totalCount = 3,
+                ),
+            )
+        }
+
+        assertEquals(listOf("a", "b", "c"), result.getOrThrow())
     }
 }

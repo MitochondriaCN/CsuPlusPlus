@@ -9,8 +9,12 @@ import io.ktor.client.request.*
  */
 class CourseApi(private val api: ApiClient) {
 
-    suspend fun list(query: PageQuery = PageQuery()): Result<PagedResponse<CourseResponse>> =
+    suspend fun list(
+        collegeId: Long? = null,
+        query: PageQuery = PageQuery(),
+    ): Result<PagedResponse<CourseResponse>> =
         api.get("course/list") {
+            collegeId?.let { parameter("collegeId", it) }
             pageParams(query)
         }
 

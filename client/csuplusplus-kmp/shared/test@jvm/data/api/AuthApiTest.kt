@@ -106,4 +106,59 @@ class AuthApiTest {
             server.stop(0)
         }
     }
+
+    @Test
+    fun getCapabilitiesDecodesPolicyMap() = runBlocking {
+        var lastMethod: String? = null
+        var lastPath: String? = null
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { exchange ->
+            lastMethod = exchange.requestMethod
+            lastPath = exchange.requestURI.path
+            val bytes = """
+                {
+                  "capabilities": {
+                    "AccessOwnUniversity": true,
+                    "ManageOwnUniversity": true,
+                    "PlatformAdmin": false
+                  }
+                }
+            """.trimIndent().toByteArray(Charsets.UTF_8)
+            exchange.responseHeaders.add("Content-Type", "application/json; charset=utf-8")
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+            exchange.close()
+        }
+        server.start()
+
+        val json = Json {
+            ignoreUnknownKeys = true
+            coerceInputValues = true
+            encodeDefaults = true
+        }
+        val config = NetworkConfig(baseUrl = "http://127.0.0.1:${server.address.port}/api")
+        val client = HttpClient {
+            expectSuccess = false
+            install(ContentNegotiation) { json(json) }
+            install(DefaultRequest) {
+                url(config.normalizedBaseUrl)
+                accept(ContentType.Application.Json)
+            }
+        }
+        val authApi = AuthApi(ApiClient(client, json, config))
+
+        try {
+            val result = authApi.getCapabilities()
+            assertTrue(result.isSuccess)
+            assertEquals("GET", lastMethod)
+            assertEquals("/api/auth/capabilities", lastPath)
+            val caps = result.getOrThrow().capabilities
+            assertEquals(true, caps["AccessOwnUniversity"])
+            assertEquals(true, caps["ManageOwnUniversity"])
+            assertEquals(false, caps["PlatformAdmin"])
+        } finally {
+            client.close()
+            server.stop(0)
+        }
+    }
 }
