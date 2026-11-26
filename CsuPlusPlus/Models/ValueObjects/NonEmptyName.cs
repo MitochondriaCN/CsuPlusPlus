@@ -5,13 +5,13 @@ namespace CsuPlusPlus.Models.ValueObjects;
 [ComplexType]
 public record NonEmptyName
 {
-    public const int MaxLength = 30;
+    public const int MaxLength = 50;
 
     public NonEmptyName(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         if (value.Length > MaxLength)
-            throw new ArgumentOutOfRangeException(nameof(value), "名称长度大于30个字符。");
+            throw new ArgumentOutOfRangeException(nameof(value), "名称长度大于50个字符。");
 
         Value = value;
     }
