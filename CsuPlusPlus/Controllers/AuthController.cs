@@ -7,8 +7,16 @@ namespace CsuPlusPlus.Controllers;
 
 [ApiController]
 [Route("auth")]
-public class AuthController(IAuthService authService) : ControllerBase
+public class AuthController(IAuthService authService, ICapabilityService capabilityService) : ControllerBase
 {
+    [Authorize]
+    [HttpGet("capabilities")]
+    public async Task<ActionResult<CapabilitiesResponse>> Capabilities(CancellationToken cancellationToken)
+    {
+        var response = await capabilityService.GetCapabilitiesAsync(User, cancellationToken);
+        return Ok(response);
+    }
+
     [AllowAnonymous]
     [HttpPost("register")]
     public async Task<ActionResult<LoginResponse>> Register(

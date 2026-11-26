@@ -9,6 +9,7 @@ using CsuPlusPlus.Services.Auth;
 using CsuPlusPlus.Services.College;
 using CsuPlusPlus.Services.Course;
 using CsuPlusPlus.Services.File;
+using CsuPlusPlus.Services.Release;
 using CsuPlusPlus.Services.Setting;
 using CsuPlusPlus.Services.University;
 using CsuPlusPlus.Services.UserProfile;
@@ -42,20 +43,23 @@ public class Program
 
         // Configure
         builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
-        builder.Services.Configure<FileStorageOptions>(
-            builder.Configuration.GetSection(FileStorageOptions.SectionName));
+        builder.Services.Configure<R2StorageOptions>(
+            builder.Configuration.GetSection(R2StorageOptions.SectionName));
 
         // Services
         builder.Services.AddHttpContextAccessor();
+        builder.Services.AddSingleton<IFileStorage, R2FileStorage>();
         builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
         builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         builder.Services.AddScoped<IAuthService, MailPasswordAuthService>();
+        builder.Services.AddScoped<ICapabilityService, CapabilityService>();
         builder.Services.AddScoped<IUserProfileService, UserProfileService>();
         builder.Services.AddScoped<IUniversityService, UniversityService>();
         builder.Services.AddScoped<ICollegeService, CollegeService>();
         builder.Services.AddScoped<ISettingsService, JsonSettingsService>();
         builder.Services.AddScoped<IFileService, FileService>();
         builder.Services.AddScoped<ICourseService, CourseService>();
+        builder.Services.AddScoped<IReleaseService, ReleaseService>();
 
         // JWT
         var jwt = builder.Configuration

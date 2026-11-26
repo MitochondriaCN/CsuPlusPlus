@@ -13,7 +13,14 @@ public class UserProfileService(
         db.Users.AsNoTracking()
             .Where(u => u.Id == userId)
             .Select(u =>
-                new UserProfileDto(u.Id, u.MailAddress.Value, u.Nickname.Value, u.College.Id, u.College.Name.Value))
+                new UserProfileDto(
+                    u.Id,
+                    u.MailAddress.Value,
+                    u.Nickname.Value,
+                    u.College.University.Id,
+                    u.College.University.Name.Value,
+                    u.College.Id,
+                    u.College.Name.Value))
             .SingleOrDefaultAsync(cancellationToken);
 
     public async Task<UpdateProfileResult> UpdateProfileAsync(
@@ -33,6 +40,7 @@ public class UserProfileService(
 
         var user = await db.Users
             .Include(u => u.College)
+            .ThenInclude(c => c.University)
             .SingleOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (user is null)
             return new UpdateProfileResult(UpdateProfileStatus.UserNotFound);
@@ -42,7 +50,13 @@ public class UserProfileService(
 
         return new UpdateProfileResult(
             UpdateProfileStatus.Success,
-            new UserProfileDto(user.Id, user.MailAddress.Value, user.Nickname.Value, user.College.Id,
+            new UserProfileDto(
+                user.Id,
+                user.MailAddress.Value,
+                user.Nickname.Value,
+                user.College.University.Id,
+                user.College.University.Name.Value,
+                user.College.Id,
                 user.College.Name.Value));
     }
 }

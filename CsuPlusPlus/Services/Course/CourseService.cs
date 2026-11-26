@@ -22,24 +22,13 @@ public class CourseService(AppDbContext db) : ICourseService
             c.CreatedAt,
             c.UpdatedAt);
 
-    public async Task<GetCourseResponse> GetByUniversityAsync(long universityId, PageRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (!await db.Universities.AnyAsync(u => u.Id == universityId, cancellationToken))
-            return new GetCourseResponse(GetCourseStatus.UniversityNotFound);
+    public Task<GetCourseResponse> GetByUniversityAsync(long universityId, PageRequest request,
+        CancellationToken cancellationToken, long? collegeId = null) =>
+        QueryByUniversityAsync(universityId, null, collegeId, request, cancellationToken);
 
-        var query = db.Courses.AsNoTracking().Where(c => c.University.Id == universityId);
-        var totalCount = await query.LongCountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(c => c.Id)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .Select(ToResponse)
-            .ToListAsync(cancellationToken);
-
-        return new GetCourseResponse(GetCourseStatus.Success,
-            new PagedResponse<CourseResponse>(items, request.Page, request.PageSize, totalCount));
-    }
+    public Task<GetCourseResponse> SearchAsync(long universityId, string? keyword, PageRequest request,
+        CancellationToken cancellationToken) =>
+        QueryByUniversityAsync(universityId, keyword, null, request, cancellationToken);
 
     public async Task<GetCourseResponse> GetByCollegeAsync(long collegeId, PageRequest request,
         CancellationToken cancellationToken, long? universityId = null)
@@ -152,4 +141,81 @@ public class CourseService(AppDbContext db) : ICourseService
 
         return new DeleteCourseResponse(DeleteCourseStatus.Success);
     }
+
+    private async Task<GetCourseResponse> QueryByUniversityAsync(long universityId, string? keyword,
+        long? collegeId, PageRequest request, CancellationToken cancellationToken)
+    {
+        if (!await db.Universities.AnyAsync(u => u.Id == universityId, cancellationToken))
+            return new GetCourseResponse(GetCourseStatus.UniversityNotFound);
+
+        var query = db.Courses.AsNoTracking().Where(c => c.University.Id == universityId);
+
+        if (collegeId is { } targetCollegeId)
+        {
+            var collegeUniversityId = await db.Colleges.AsNoTracking()
+                .Where(c => c.Id == targetCollegeId)
+                .Select(c => (long?)c.University.Id)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (collegeUniversityId is null)
+                return new GetCourseResponse(GetCourseStatus.CollegeNotFound);
+
+            if (collegeUniversityId != universityId)
+                return new GetCourseResponse(GetCourseStatus.CollegeInOtherUniversity);
+
+            query = query.Where(c => c.College != null && c.College.Id == targetCollegeId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var term = keyword.Trim();
+            if (db.Database.IsNpgsql())
+            {
+                var pattern = $"%{EscapeLikePattern(term)}%";
+                query = query
+                    .Where(c =>
+                        EF.Functions.ILike(c.Name.Value, pattern, "\\")
+                        || EF.Functions.TrigramsAreSimilar(c.Name.Value, term)
+                        || (c.Alias != null && (
+                            EF.Functions.ILike(c.Alias.Value, pattern, "\\")
+                            || EF.Functions.TrigramsAreSimilar(c.Alias.Value, term))))
+                    .OrderByDescending(c =>
+                        EF.Functions.ILike(c.Name.Value, pattern, "\\")
+                        || (c.Alias != null && EF.Functions.ILike(c.Alias.Value, pattern, "\\")))
+                    .ThenByDescending(c => Math.Max(
+                        EF.Functions.TrigramsSimilarity(c.Name.Value, term),
+                        EF.Functions.TrigramsSimilarity(c.Alias == null ? "" : c.Alias.Value, term)))
+                    .ThenBy(c => c.Id);
+            }
+            else
+            {
+                var lowerTerm = term.ToLower();
+                query = query
+                    .Where(c =>
+                        c.Name.Value.ToLower().Contains(lowerTerm)
+                        || (c.Alias != null && c.Alias.Value.ToLower().Contains(lowerTerm)))
+                    .OrderBy(c => c.Id);
+            }
+        }
+        else
+        {
+            query = query.OrderBy(c => c.Id);
+        }
+
+        var totalCount = await query.LongCountAsync(cancellationToken);
+        var items = await query
+            .Skip(request.Skip)
+            .Take(request.PageSize)
+            .Select(ToResponse)
+            .ToListAsync(cancellationToken);
+
+        return new GetCourseResponse(GetCourseStatus.Success,
+            new PagedResponse<CourseResponse>(items, request.Page, request.PageSize, totalCount));
+    }
+
+    private static string EscapeLikePattern(string value) =>
+        value
+            .Replace("\\", "\\\\")
+            .Replace("%", "\\%")
+            .Replace("_", "\\_");
 }
