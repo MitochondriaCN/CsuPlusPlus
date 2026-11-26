@@ -80,7 +80,7 @@ inline fun <T, R> PagedResponse<T>.mapItems(transform: (T) -> R): PagedResponse<
  *     scope = viewModelScope,
  *     onStateChange = { paged -> _uiState.update { it.copy(courses = paged) } },
  *     fetchPage = { query ->
- *         courseApi.list(query).map { resp ->
+ *         courseApi.list(query = query).map { resp ->
  *             resp.mapItems { CourseSummary(id = it.id.toString(), name = it.name) }
  *         }
  *     },
@@ -253,5 +253,23 @@ class Paginator<T>(
      */
     private inline fun commit(transform: (PagedState<T>) -> PagedState<T>) {
         onStateChange(_state.updateAndGet(transform))
+    }
+}
+
+suspend fun <T> fetchAllPages(
+    pageSize: Int = 100,
+    fetch: suspend (PageQuery) -> Result<PagedResponse<T>>,
+): Result<List<T>> {
+    val accumulated = mutableListOf<T>()
+    var page = 1
+    while (true) {
+        val response = fetch(PageQuery(page = page, pageSize = pageSize)).getOrElse {
+            return Result.failure(it)
+        }
+        accumulated += response.items
+        if (!response.hasNextPage || response.items.isEmpty()) {
+            return Result.success(accumulated)
+        }
+        page += 1
     }
 }

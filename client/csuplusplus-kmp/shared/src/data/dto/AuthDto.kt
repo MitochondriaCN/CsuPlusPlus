@@ -21,6 +21,8 @@ data class UserProfileDto(
     val id: Long,
     val email: String,
     val nickname: String,
+    val universityId: Long,
+    val universityName: String,
     val collegeId: Long,
     val collegeName: String,
 )
@@ -30,4 +32,9 @@ data class LoginResponse(
     val token: String,
     val expiresAt: String,
     val user: UserProfileDto,
+)
+
+@Serializable
+data class CapabilitiesResponse(
+    val capabilities: Map<String, Boolean> = emptyMap(),
 )

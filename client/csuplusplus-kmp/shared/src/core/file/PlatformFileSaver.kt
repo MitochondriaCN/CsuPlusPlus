@@ -1,7 +1,6 @@
 package ink.qingshuige.csuplusplus.core.file
 
 import androidx.compose.runtime.Composable
-import ink.qingshuige.csuplusplus.data.dto.DownloadedFile
 
 sealed interface FileSaveResult {
     data class Success(val message: String) : FileSaveResult
@@ -10,10 +9,11 @@ sealed interface FileSaveResult {
 }
 
 interface PlatformFileSaver {
-    suspend fun saveWithPicker(
+    suspend fun saveFromUrl(
+        url: String,
         suggestedName: String,
         extension: String,
-        fetchFile: suspend () -> Result<DownloadedFile>,
+        fetchBytes: suspend (url: String) -> Result<ByteArray>,
     ): FileSaveResult
 }
 

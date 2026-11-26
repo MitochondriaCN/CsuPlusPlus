@@ -58,6 +58,7 @@ private fun ApiError.toUserMessage(): String = when (this) {
         413 -> "文件大小超出限制"
         415 -> "不支持的文件格式"
         429 -> "请求过于频繁，请稍后重试"
+        502 -> "文件存储服务异常，请稍后重试"
         in 500..599 -> "服务器开小差了（$statusCode）"
         else -> "请求失败（HTTP $statusCode）"
     }

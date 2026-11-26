@@ -4,7 +4,7 @@
 
 ## 发版前准备
 
-1. 在 `androidApp/module.yaml` 中递增 `versionCode` 并更新 `versionName`。
+1. 在仓库根目录 `version.properties` 中更新 `buildCode` 与 `buildName`，并运行 `./scripts/sync-version.sh`（或直接运行 `./scripts/sync-version.sh <buildCode> <buildName>`）同步更新 `androidApp/module.yaml` 与各平台配置。
 2. 首次构建需确保已生成签名密钥（`keystore.properties` 与 `*.keystore` 勿提交到 Git）：
    ```bash
    cd androidApp && ../kotlin tool generate-keystore --properties-file keystore.properties

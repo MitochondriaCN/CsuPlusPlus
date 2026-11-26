@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import ink.qingshuige.csuplusplus.core.network.ApiException
 import ink.qingshuige.csuplusplus.core.network.TokenProvider
 import ink.qingshuige.csuplusplus.core.network.userMessage
+import ink.qingshuige.csuplusplus.core.session.SessionStore
 import ink.qingshuige.csuplusplus.data.api.AuthApi
 import ink.qingshuige.csuplusplus.data.api.CollegeApi
 import ink.qingshuige.csuplusplus.data.api.UniversityApi
@@ -20,6 +21,7 @@ class AuthPageViewModel(
     private val universityApi: UniversityApi,
     private val collegeApi: CollegeApi,
     private val tokenProvider: TokenProvider,
+    private val sessionStore: SessionStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<AuthPageUiState>(AuthPageUiState.LoggingIn())
@@ -35,6 +37,7 @@ class AuthPageViewModel(
 
             authApi.login(LoginRequest(trimmedEmail, password)).fold(
                 onSuccess = { resp ->
+                    sessionStore.seedProfile(resp.user)
                     tokenProvider.updateToken(resp.token)
                     _uiState.update { AuthPageUiState.Success }
                 },
@@ -69,18 +72,10 @@ class AuthPageViewModel(
                     collegeId = collegeId,
                 ),
             ).fold(
-                onSuccess = {
-                    authApi.login(LoginRequest(trimmedEmail, password)).fold(
-                        onSuccess = { resp ->
-                            tokenProvider.updateToken(resp.token)
-                            _uiState.update { AuthPageUiState.Success }
-                        },
-                        onFailure = {
-                            _uiState.update {
-                                AuthPageUiState.LoggingIn(errorMessage = "注册成功，请使用新账号登录")
-                            }
-                        },
-                    )
+                onSuccess = { resp ->
+                    sessionStore.seedProfile(resp.user)
+                    tokenProvider.updateToken(resp.token)
+                    _uiState.update { AuthPageUiState.Success }
                 },
                 onFailure = { e ->
                     updateSigningUp {
