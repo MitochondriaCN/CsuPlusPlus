@@ -18,6 +18,21 @@ class CourseApi(private val api: ApiClient) {
             pageParams(query)
         }
 
+    suspend fun listAny(
+        universityId: Long? = null,
+        collegeId: Long? = null,
+        keyword: String? = null,
+        query: PageQuery = PageQuery(),
+    ): Result<PagedResponse<CourseResponse>> =
+        api.get("course/list/any") {
+            universityId?.let { parameter("universityId", it) }
+            collegeId?.let { parameter("collegeId", it) }
+            keyword?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                parameter("keyword", it)
+            }
+            pageParams(query)
+        }
+
     suspend fun search(
         keyword: String? = null,
         query: PageQuery = PageQuery(),
@@ -26,15 +41,6 @@ class CourseApi(private val api: ApiClient) {
             keyword?.trim()?.takeIf { it.isNotEmpty() }?.let {
                 parameter("keyword", it)
             }
-            pageParams(query)
-        }
-
-    suspend fun listByCollege(
-        collegeId: Long,
-        query: PageQuery = PageQuery(),
-    ): Result<PagedResponse<CourseResponse>> =
-        api.get("course/list/college") {
-            parameter("collegeId", collegeId)
             pageParams(query)
         }
 

@@ -47,7 +47,6 @@ internal fun CourseListPane(
     highlightedCourseId: Long?,
     onSelectUniversity: (Long) -> Unit,
     onSelectCollege: (Long?) -> Unit,
-    onSwitchBackToHomeUniversity: () -> Unit,
     onRetryUniversities: () -> Unit,
     onRetryColleges: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
@@ -69,19 +68,8 @@ internal fun CourseListPane(
         ?.takeIf { it.isNotBlank() }
     val isSearching = activeSearchQuery.isNotBlank()
     val subtitle = when {
-        scope.isViewingOtherUniversity -> "暂不支持跨校查看课程"
-        isSearching && coursesState.isFirstLoading -> {
-            if (scope.selectedCollegeId != null) "全校搜索中..." else "搜索课程中..."
-        }
-
-        isSearching && coursesState.page > 0 -> {
-            if (scope.selectedCollegeId != null) {
-                "全校找到 ${coursesState.totalCount} 门匹配课程"
-            } else {
-                "找到 ${coursesState.totalCount} 门匹配课程"
-            }
-        }
-
+        isSearching && coursesState.isFirstLoading -> "搜索课程中..."
+        isSearching && coursesState.page > 0 -> "找到 ${coursesState.totalCount} 门匹配课程"
         isSearching -> "搜索课程"
         coursesState.isFirstLoading -> "加载课程中..."
         coursesState.page > 0 -> "共 ${coursesState.totalCount} 门课程"
@@ -91,14 +79,6 @@ internal fun CourseListPane(
     LaunchedEffect(searchQuery, activeSearchQuery) {
         if ((searchQuery.isNotEmpty() || activeSearchQuery.isNotEmpty()) && !isSearchExpanded) {
             isSearchExpanded = true
-        }
-    }
-
-    LaunchedEffect(scope.isViewingOtherUniversity) {
-        if (scope.isViewingOtherUniversity) {
-            focusManager.clearFocus()
-            requestSearchFocus = false
-            isSearchExpanded = false
         }
     }
 
@@ -114,7 +94,7 @@ internal fun CourseListPane(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
                 AnimatedContent(
-                    targetState = isSearchExpanded && !scope.isViewingOtherUniversity,
+                    targetState = isSearchExpanded,
                     transitionSpec = {
                         fadeIn(tween(180)) togetherWith fadeOut(tween(140))
                     },
@@ -208,7 +188,6 @@ internal fun CourseListPane(
                                         isSearchExpanded = true
                                         requestSearchFocus = true
                                     },
-                                    enabled = !scope.isViewingOtherUniversity,
                                     modifier = if (isCompactHeader) Modifier.size(40.dp) else Modifier,
                                 ) {
                                     Icon(Lucide.Search, contentDescription = "搜索课程")
@@ -226,90 +205,77 @@ internal fun CourseListPane(
                 }
             },
         ) { innerPadding ->
-            if (scope.isViewingOtherUniversity) {
-                CrossUniversityUnsupportedPlaceholder(
-                    universityName = displayedUniversityName ?: "所选大学",
-                    homeUniversityName = scope.homeUniversityName,
-                    collegeCount = scope.colleges.size,
-                    isLoadingColleges = scope.isLoadingColleges,
-                    onSwitchBack = onSwitchBackToHomeUniversity,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                )
-            } else {
-                PaginatedLazyColumn(
-                    pagedState = coursesState,
-                    onLoadMore = onLoadMore,
-                    onRetry = onRetry,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                    listState = listState,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    itemKey = { it.id },
-                    emptyContent = {
-                        when {
-                            isSearching -> {
-                                Column(
-                                    modifier = Modifier.padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    Text(
-                                        text = "未找到与「$activeSearchQuery」相关的课程",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center,
-                                    )
-                                    FilledTonalButton(
-                                        onClick = {
-                                            focusManager.clearFocus()
-                                            requestSearchFocus = false
-                                            isSearchExpanded = false
-                                            onClearSearch()
-                                        },
-                                    ) {
-                                        Text("查看全部课程")
-                                    }
-                                }
-                            }
-
-                            scope.selectedCollegeId != null -> {
-                                Column(
-                                    modifier = Modifier.padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    Text(
-                                        text = "「${scope.selectedCollegeName ?: "该学院"}」暂无课程",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center,
-                                    )
-                                    FilledTonalButton(onClick = { onSelectCollege(null) }) {
-                                        Text("查看全部学院")
-                                    }
-                                }
-                            }
-
-                            else -> {
+            PaginatedLazyColumn(
+                pagedState = coursesState,
+                onLoadMore = onLoadMore,
+                onRetry = onRetry,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                listState = listState,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                itemKey = { it.id },
+                emptyContent = {
+                    when {
+                        isSearching -> {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
                                 Text(
-                                    text = "暂无课程",
+                                    text = "未找到与「$activeSearchQuery」相关的课程",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
                                 )
+                                FilledTonalButton(
+                                    onClick = {
+                                        focusManager.clearFocus()
+                                        requestSearchFocus = false
+                                        isSearchExpanded = false
+                                        onClearSearch()
+                                    },
+                                ) {
+                                    Text("查看全部课程")
+                                }
                             }
                         }
-                    },
-                ) { course ->
-                    CourseCard(
-                        course = course,
-                        isSelected = course.id == highlightedCourseId,
-                        onClick = { onCourseClick(course) },
-                    )
-                }
+
+                        scope.selectedCollegeId != null -> {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Text(
+                                    text = "「${scope.selectedCollegeName ?: "该学院"}」暂无课程",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                                FilledTonalButton(onClick = { onSelectCollege(null) }) {
+                                    Text("查看全部学院")
+                                }
+                            }
+                        }
+
+                        else -> {
+                            Text(
+                                text = "暂无课程",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                },
+            ) { course ->
+                CourseCard(
+                    course = course,
+                    isSelected = course.id == highlightedCourseId,
+                    onClick = { onCourseClick(course) },
+                )
             }
         }
     }
@@ -544,63 +510,6 @@ private fun CollegeSelectorBadge(
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CrossUniversityUnsupportedPlaceholder(
-    universityName: String,
-    homeUniversityName: String?,
-    collegeCount: Int,
-    isLoadingColleges: Boolean,
-    onSwitchBack: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier.padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier.widthIn(max = 360.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Surface(
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                modifier = Modifier.size(56.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Lucide.Building2,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                }
-            }
-            Text(
-                text = "暂不支持跨校查看课程",
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-            )
-            val collegeSummary = if (isLoadingColleges) {
-                "正在同步该校学院列表..."
-            } else {
-                "已同步该校 $collegeCount 个学院，可提前在右上角查看或选择学院；后端补充跨校课程查询接口后即可直接展示。"
-            }
-            Text(
-                text = "当前已切换至「$universityName」。$collegeSummary",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            if (homeUniversityName != null) {
-                FilledTonalButton(onClick = onSwitchBack) {
-                    Text("切回$homeUniversityName")
                 }
             }
         }

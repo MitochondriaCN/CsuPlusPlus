@@ -208,15 +208,6 @@ class Paginator<T>(
         }
     }
 
-    /**
-     * 取消进行中的请求并重置分页状态（用于切换暂不支持查询的作用域）。
-     */
-    fun clear() {
-        activeJob?.cancel()
-        lastRequest = RequestType.REFRESH
-        commit { PagedState(pageSize = pageSize) }
-    }
-
     private fun appendPage(targetPage: Int) {
         activeJob?.cancel()
         lastRequest = RequestType.APPEND

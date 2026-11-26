@@ -68,7 +68,6 @@ fun HomePage(
                     highlightedCourseId = if (isDualPane) uiState.selectedCourseId else null,
                     onSelectUniversity = viewModel::selectUniversity,
                     onSelectCollege = viewModel::selectCollege,
-                    onSwitchBackToHomeUniversity = viewModel::switchBackToHomeUniversity,
                     onRetryUniversities = viewModel::retryUniversities,
                     onRetryColleges = viewModel::retryColleges,
                     onSearchQueryChange = viewModel::onSearchQueryChange,

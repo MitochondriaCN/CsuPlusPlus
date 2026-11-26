@@ -36,6 +36,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 data class CourseSummary(
     val id: Long,
+    val universityId: Long,
     val name: String,
     val universityName: String,
     val collegeName: String?,
@@ -84,7 +85,6 @@ data class CourseFileDeleteUiState(
 
 data class CourseScopeUiState(
     val homeUniversityId: Long? = null,
-    val homeUniversityName: String? = null,
     val canSwitchUniversity: Boolean = false,
     val universities: List<UniversityResponse> = emptyList(),
     val isLoadingUniversities: Boolean = false,
@@ -95,12 +95,14 @@ data class CourseScopeUiState(
     val isLoadingColleges: Boolean = false,
     val collegesError: String? = null,
     val selectedCollegeId: Long? = null,
-    val selectedCollegeName: String? = null,
 ) {
     val isViewingOtherUniversity: Boolean
         get() = selectedUniversityId != null &&
                 homeUniversityId != null &&
                 selectedUniversityId != homeUniversityId
+
+    val selectedCollegeName: String?
+        get() = selectedCollegeId?.let { id -> colleges.find { it.id == id }?.name }
 }
 
 data class HomeUiState(
@@ -147,25 +149,27 @@ class HomeViewModel(
         },
         fetchPage = { query ->
             val state = _uiState.value
-            if (state.scope.isViewingOtherUniversity) {
-                Result.success(
-                    PagedResponse(
-                        items = emptyList(),
-                        page = 1,
-                        pageSize = query.pageSize,
-                        totalCount = 0,
-                    ),
+            val keyword = state.activeSearchQuery.trim()
+            val result = when {
+                state.scope.canSwitchUniversity -> courseApi.listAny(
+                    universityId = state.scope.selectedUniversityId,
+                    collegeId = state.scope.selectedCollegeId,
+                    keyword = keyword.ifBlank { null },
+                    query = query,
                 )
-            } else {
-                val keyword = state.activeSearchQuery
-                val result = if (keyword.isBlank()) {
-                    courseApi.list(collegeId = state.scope.selectedCollegeId, query = query)
-                } else {
-                    courseApi.search(keyword = keyword, query = query)
-                }
-                result.map { resp ->
-                    resp.mapItems(CourseResponse::toSummary)
-                }
+
+                keyword.isBlank() -> courseApi.list(
+                    collegeId = state.scope.selectedCollegeId,
+                    query = query,
+                )
+
+                else -> courseApi.search(
+                    keyword = keyword,
+                    query = query,
+                )
+            }
+            result.map { resp ->
+                resp.mapItems(CourseResponse::toSummary)
             }
         },
         getKey = { it.id.toString() },
@@ -222,48 +226,38 @@ class HomeViewModel(
     fun selectCollege(collegeId: Long?) {
         val current = _uiState.value
         if (current.scope.selectedUniversityId == null) return
+        val shouldClearSearch = !current.scope.canSwitchUniversity
         if (current.scope.selectedCollegeId == collegeId &&
-            current.activeSearchQuery.isBlank() &&
+            (!shouldClearSearch || current.activeSearchQuery.isBlank()) &&
             current.courses.errorMessage == null
         ) {
             return
         }
 
-        searchDebounceJob?.cancel()
-        val collegeName = collegeId?.let { id ->
-            current.scope.colleges.find { it.id == id }?.name
+        if (shouldClearSearch) {
+            searchDebounceJob?.cancel()
         }
         _uiState.update {
             it.copy(
-                searchQuery = "",
-                activeSearchQuery = "",
-                scope = it.scope.copy(
-                    selectedCollegeId = collegeId,
-                    selectedCollegeName = collegeName,
-                ),
+                searchQuery = if (shouldClearSearch) "" else it.searchQuery,
+                activeSearchQuery = if (shouldClearSearch) "" else it.activeSearchQuery,
+                scope = it.scope.copy(selectedCollegeId = collegeId),
             )
         }
-        if (!current.scope.isViewingOtherUniversity) {
-            coursePaginator.refresh(clearItems = true)
-        }
+        coursePaginator.refresh(clearItems = true)
     }
 
     fun selectUniversity(universityId: Long) {
         val current = _uiState.value
         if (!current.scope.canSwitchUniversity) return
-        if (current.scope.selectedUniversityId == universityId) return
+        if (current.scope.selectedUniversityId == universityId && current.courses.errorMessage == null) {
+            return
+        }
 
         val targetName = current.scope.universities.find { it.id == universityId }?.name
-            ?: current.scope.homeUniversityName?.takeIf { current.scope.homeUniversityId == universityId }
+            ?: sessionStore.state.value.profile?.takeIf { it.universityId == universityId }?.universityName
 
         applyUniversitySwitch(universityId = universityId, universityName = targetName)
-    }
-
-    fun switchBackToHomeUniversity() {
-        val homeId = _uiState.value.scope.homeUniversityId ?: return
-        val homeName = _uiState.value.scope.homeUniversityName
-        if (_uiState.value.scope.selectedUniversityId == homeId) return
-        applyUniversitySwitch(universityId = homeId, universityName = homeName)
     }
 
     fun retryUniversities() {
@@ -279,7 +273,6 @@ class HomeViewModel(
     }
 
     fun onSearchQueryChange(query: String) {
-        if (_uiState.value.scope.isViewingOtherUniversity) return
         _uiState.update { it.copy(searchQuery = query) }
         val normalized = query.trim()
         searchDebounceJob?.cancel()
@@ -293,7 +286,6 @@ class HomeViewModel(
     }
 
     fun submitSearch() {
-        if (_uiState.value.scope.isViewingOtherUniversity) return
         searchDebounceJob?.cancel()
         val normalized = _uiState.value.searchQuery.trim()
         if (normalized != _uiState.value.activeSearchQuery || _uiState.value.courses.errorMessage != null) {
@@ -305,13 +297,12 @@ class HomeViewModel(
         searchDebounceJob?.cancel()
         val hadActiveQuery = _uiState.value.activeSearchQuery.isNotEmpty()
         _uiState.update { it.copy(searchQuery = "", activeSearchQuery = "") }
-        if (hadActiveQuery && !_uiState.value.scope.isViewingOtherUniversity) {
+        if (hadActiveQuery) {
             coursePaginator.refresh(clearItems = true)
         }
     }
 
     private fun executeSearch(normalizedQuery: String) {
-        if (_uiState.value.scope.isViewingOtherUniversity) return
         if (_uiState.value.activeSearchQuery == normalizedQuery &&
             _uiState.value.courses.errorMessage == null &&
             _uiState.value.courses.page > 0
@@ -327,23 +318,14 @@ class HomeViewModel(
         if (scope.selectedUniversityId != null && scope.collegesError != null) {
             retryColleges()
         }
-        if (scope.isViewingOtherUniversity) {
-            scope.selectedUniversityId?.let {
-                loadedCollegesUniversityId = null
-                loadColleges(it)
-            }
-            return
-        }
         coursePaginator.refresh()
     }
 
     fun loadMoreCourses() {
-        if (_uiState.value.scope.isViewingOtherUniversity) return
         coursePaginator.loadNextPage()
     }
 
     fun retryCourses() {
-        if (_uiState.value.scope.isViewingOtherUniversity) return
         coursePaginator.retry()
     }
 
@@ -357,14 +339,27 @@ class HomeViewModel(
 
     fun selectCourse(courseId: Long) {
         val currentState = _uiState.value
-        ensureSessionLoaded()
         if (currentState.selectedCourseId == courseId &&
             currentState.detailState is CourseDetailUiState.Success
         ) {
+            ensureSessionLoaded()
             return
         }
+        openCourseDetail(courseId)
+    }
 
+    fun retryDetail() {
+        val courseId = _uiState.value.selectedCourseId ?: return
+        openCourseDetail(courseId)
+    }
+
+    private fun openCourseDetail(courseId: Long) {
+        ensureSessionLoaded()
+        val currentState = _uiState.value
         val cached = currentState.courses.items.find { it.id == courseId }
+        val homeUniversityId = currentState.scope.homeUniversityId
+        val isRemoteCourse = cached != null && homeUniversityId != null && cached.universityId != homeUniversityId
+
         activeDetailCourseId = courseId
         detailJob?.cancel()
 
@@ -380,6 +375,8 @@ class HomeViewModel(
         }
 
         filePaginator.refresh(clearItems = true)
+
+        if (isRemoteCourse) return
 
         detailJob = viewModelScope.launch {
             courseApi.getById(courseId).fold(
@@ -397,29 +394,6 @@ class HomeViewModel(
                         _uiState.update {
                             it.copy(detailState = CourseDetailUiState.Error(error.userMessage))
                         }
-                    }
-                },
-            )
-        }
-    }
-
-    fun retryDetail() {
-        val courseId = _uiState.value.selectedCourseId ?: return
-        ensureSessionLoaded()
-        _uiState.update { it.copy(detailState = CourseDetailUiState.Loading) }
-        activeDetailCourseId = courseId
-        filePaginator.refresh(clearItems = true)
-        detailJob?.cancel()
-        detailJob = viewModelScope.launch {
-            courseApi.getById(courseId).fold(
-                onSuccess = { dto ->
-                    _uiState.update {
-                        it.copy(detailState = CourseDetailUiState.Success(dto.toSummary()))
-                    }
-                },
-                onFailure = { error ->
-                    _uiState.update {
-                        it.copy(detailState = CourseDetailUiState.Error(error.userMessage))
                     }
                 },
             )
@@ -595,50 +569,36 @@ class HomeViewModel(
     private fun syncSession(session: SessionState) {
         val profile = session.profile
         val canSwitch = session.capabilities.platformAdmin
-        var shouldSnapBackToHome = false
+        val homeId = profile?.universityId ?: _uiState.value.scope.homeUniversityId
 
         _uiState.update { state ->
             val currentScope = state.scope
-            val homeId = profile?.universityId ?: currentScope.homeUniversityId
-            val homeName = profile?.universityName ?: currentScope.homeUniversityName
-
-            val nextSelectedUniversityId = when {
-                !canSwitch && homeId != null -> homeId
-                currentScope.selectedUniversityId != null -> currentScope.selectedUniversityId
-                else -> homeId
+            val selectedId = currentScope.selectedUniversityId ?: homeId
+            val selectedName = when {
+                selectedId == null -> null
+                selectedId == profile?.universityId -> profile.universityName
+                else -> currentScope.selectedUniversityName
             }
-            val nextSelectedUniversityName = when {
-                nextSelectedUniversityId == null -> null
-                nextSelectedUniversityId == homeId -> homeName
-                else -> currentScope.universities.find { it.id == nextSelectedUniversityId }?.name
-                    ?: currentScope.selectedUniversityName
-            }
-
-            shouldSnapBackToHome = currentScope.selectedUniversityId != null &&
-                    nextSelectedUniversityId != currentScope.selectedUniversityId
-
             state.copy(
                 currentUserId = profile?.id ?: state.currentUserId,
                 scope = currentScope.copy(
                     homeUniversityId = homeId,
-                    homeUniversityName = homeName,
                     canSwitchUniversity = canSwitch,
-                    selectedUniversityId = nextSelectedUniversityId,
-                    selectedUniversityName = nextSelectedUniversityName,
-                    colleges = if (shouldSnapBackToHome) emptyList() else currentScope.colleges,
-                    collegesError = if (shouldSnapBackToHome) null else currentScope.collegesError,
-                    selectedCollegeId = if (shouldSnapBackToHome) null else currentScope.selectedCollegeId,
-                    selectedCollegeName = if (shouldSnapBackToHome) null else currentScope.selectedCollegeName,
+                    selectedUniversityId = selectedId,
+                    selectedUniversityName = selectedName,
                 ),
             )
         }
 
-        if (shouldSnapBackToHome) {
-            loadedCollegesUniversityId = null
-            coursePaginator.refresh(clearItems = true)
+        val currentScope = _uiState.value.scope
+        if (!canSwitch && homeId != null && currentScope.selectedUniversityId != homeId) {
+            val homeName = profile?.universityName
+                ?: currentScope.universities.find { it.id == homeId }?.name
+            applyUniversitySwitch(homeId, homeName)
+            return
         }
 
-        val targetUniversityId = _uiState.value.scope.selectedUniversityId
+        val targetUniversityId = currentScope.selectedUniversityId
         if (targetUniversityId != null &&
             loadedCollegesUniversityId != targetUniversityId &&
             collegeJob?.isActive != true
@@ -652,7 +612,6 @@ class HomeViewModel(
     }
 
     private fun applyUniversitySwitch(universityId: Long, universityName: String?) {
-        searchDebounceJob?.cancel()
         collegeJob?.cancel()
         detailJob?.cancel()
         activeDetailCourseId = null
@@ -660,8 +619,6 @@ class HomeViewModel(
 
         _uiState.update {
             it.copy(
-                searchQuery = "",
-                activeSearchQuery = "",
                 selectedCourseId = null,
                 detailState = CourseDetailUiState.Empty,
                 files = PagedState(),
@@ -672,18 +629,12 @@ class HomeViewModel(
                     isLoadingColleges = false,
                     collegesError = null,
                     selectedCollegeId = null,
-                    selectedCollegeName = null,
                 ),
             )
         }
 
         loadColleges(universityId)
-
-        if (_uiState.value.scope.isViewingOtherUniversity) {
-            coursePaginator.clear()
-        } else {
-            coursePaginator.refresh(clearItems = true)
-        }
+        coursePaginator.refresh(clearItems = true)
     }
 
     private fun loadUniversities() {
@@ -748,17 +699,15 @@ class HomeViewModel(
                     if (_uiState.value.scope.selectedUniversityId != universityId) return@fold
                     loadedCollegesUniversityId = universityId
                     _uiState.update { state ->
-                        val selectedCollegeId = state.scope.selectedCollegeId
-                        val resolvedCollege = selectedCollegeId?.let { id ->
-                            list.find { it.id == id }
+                        val validCollegeId = state.scope.selectedCollegeId?.takeIf { id ->
+                            list.any { it.id == id }
                         }
                         state.copy(
                             scope = state.scope.copy(
                                 colleges = list,
                                 isLoadingColleges = false,
                                 collegesError = null,
-                                selectedCollegeId = resolvedCollege?.id,
-                                selectedCollegeName = resolvedCollege?.name,
+                                selectedCollegeId = validCollegeId,
                             ),
                         )
                     }
@@ -791,6 +740,7 @@ class HomeViewModel(
 
 private fun CourseResponse.toSummary(): CourseSummary = CourseSummary(
     id = id,
+    universityId = universityId,
     name = name,
     universityName = universityName,
     collegeName = collegeName,

@@ -40,16 +40,9 @@ data class UserCapabilities(
 data class SessionState(
     val profile: UserProfileDto? = null,
     val capabilities: UserCapabilities = UserCapabilities(),
-    val isCapabilitiesLoaded: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-) {
-    val isInitialLoading: Boolean
-        get() = isLoading && profile == null
-
-    val isRefreshing: Boolean
-        get() = isLoading && profile != null
-}
+)
 
 /**
  * 当前登录用户的统一会话与权限状态中心。
@@ -82,7 +75,6 @@ class SessionStore(
                         _state.update {
                             it.copy(
                                 capabilities = UserCapabilities(),
-                                isCapabilitiesLoaded = false,
                                 errorMessage = null,
                             )
                         }
@@ -135,7 +127,6 @@ class SessionStore(
                                 current.copy(
                                     profile = profile,
                                     capabilities = nextCapabilities ?: current.capabilities,
-                                    isCapabilitiesLoaded = capabilitiesResult.isSuccess || current.isCapabilitiesLoaded,
                                     isLoading = false,
                                     errorMessage = null,
                                 )
@@ -147,7 +138,6 @@ class SessionStore(
                             _state.update { current ->
                                 current.copy(
                                     capabilities = nextCapabilities ?: current.capabilities,
-                                    isCapabilitiesLoaded = capabilitiesResult.isSuccess || current.isCapabilitiesLoaded,
                                     isLoading = false,
                                     errorMessage = if (current.profile == null) error.userMessage else null,
                                 )
