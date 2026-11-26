@@ -57,4 +57,10 @@ class CourseApi(private val api: ApiClient) {
         api.post("course/create/any", body = request) {
             parameter("universityId", universityId)
         }
+
+    suspend fun delete(id: Long): Result<Unit> =
+        api.delete("course/$id")
+
+    suspend fun deleteAny(id: Long): Result<Unit> =
+        api.delete("course/any/$id")
 }

@@ -19,6 +19,9 @@ import ink.qingshuige.csuplusplus.data.api.FileApi
 import ink.qingshuige.csuplusplus.data.api.UniversityApi
 import ink.qingshuige.csuplusplus.data.dto.CollegeResponse
 import ink.qingshuige.csuplusplus.data.dto.CourseResponse
+import ink.qingshuige.csuplusplus.data.dto.CreateCollegeRequest
+import ink.qingshuige.csuplusplus.data.dto.CreateCourseRequest
+import ink.qingshuige.csuplusplus.data.dto.CreateUniversityRequest
 import ink.qingshuige.csuplusplus.data.dto.FileMetadataResponse
 import ink.qingshuige.csuplusplus.data.dto.PagedResponse
 import ink.qingshuige.csuplusplus.data.dto.UniversityResponse
@@ -83,6 +86,13 @@ data class CourseFileDeleteUiState(
     val isDeleting: Boolean = false,
 )
 
+sealed interface HomeAdminDialog {
+    data object CreateUniversity : HomeAdminDialog
+    data object CreateCollege : HomeAdminDialog
+    data object CreateCourse : HomeAdminDialog
+    data class DeleteCourse(val course: CourseSummary) : HomeAdminDialog
+}
+
 data class CourseScopeUiState(
     val homeUniversityId: Long? = null,
     val canSwitchUniversity: Boolean = false,
@@ -107,6 +117,8 @@ data class CourseScopeUiState(
 
 data class HomeUiState(
     val currentUserId: Long? = null,
+    val isPlatformAdmin: Boolean = false,
+    val canManageCourses: Boolean = false,
     val scope: CourseScopeUiState = CourseScopeUiState(),
     val searchQuery: String = "",
     val activeSearchQuery: String = "",
@@ -117,6 +129,9 @@ data class HomeUiState(
     val downloadingFileIds: Set<Long> = emptySet(),
     val uploadState: CourseFileUploadUiState = CourseFileUploadUiState(),
     val deleteState: CourseFileDeleteUiState = CourseFileDeleteUiState(),
+    val adminDialog: HomeAdminDialog? = null,
+    val isAdminSubmitting: Boolean = false,
+    val adminError: String? = null,
 )
 
 class HomeViewModel(
@@ -433,7 +448,7 @@ class HomeViewModel(
     fun requestDeleteFile(file: CourseFile) {
         val currentState = _uiState.value
         if (currentState.deleteState.isDeleting || file.id in currentState.downloadingFileIds) return
-        if (currentState.currentUserId != file.uploaderUserId) return
+        if (!currentState.isPlatformAdmin && currentState.currentUserId != file.uploaderUserId) return
         _uiState.update { it.copy(deleteState = CourseFileDeleteUiState(file = file)) }
     }
 
@@ -452,7 +467,12 @@ class HomeViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(deleteState = it.deleteState.copy(isDeleting = true)) }
             try {
-                fileApi.deleteFile(file.id).fold(
+                val result = if (currentState.isPlatformAdmin) {
+                    fileApi.deleteAnyFile(file.id)
+                } else {
+                    fileApi.deleteFile(file.id)
+                }
+                result.fold(
                     onSuccess = {
                         if (activeDetailCourseId == courseId) {
                             filePaginator.removeItems { it.id == file.id }
@@ -467,6 +487,139 @@ class HomeViewModel(
             } finally {
                 _uiState.update { it.copy(deleteState = CourseFileDeleteUiState()) }
             }
+        }
+    }
+
+    fun openAdminDialog(dialog: HomeAdminDialog) {
+        if (_uiState.value.isAdminSubmitting) return
+        _uiState.update { it.copy(adminDialog = dialog, adminError = null) }
+    }
+
+    fun dismissAdminDialog() {
+        if (_uiState.value.isAdminSubmitting) return
+        _uiState.update { it.copy(adminDialog = null, adminError = null) }
+    }
+
+    fun clearAdminError() {
+        if (_uiState.value.adminError == null) return
+        _uiState.update { it.copy(adminError = null) }
+    }
+
+    fun createUniversity(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.length < 2) {
+            _uiState.update { it.copy(adminError = "大学名称至少需要 2 个字符") }
+            return
+        }
+        submitAdminAction(
+            action = { universityApi.create(CreateUniversityRequest(name = trimmed)) },
+            onSuccess = { university ->
+                hasLoadedUniversities = false
+                loadUniversities()
+                applyUniversitySwitch(university.id, university.name)
+                _messages.send("已创建大学「${university.name}」")
+            },
+        )
+    }
+
+    fun createCollege(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.length < 2) {
+            _uiState.update { it.copy(adminError = "学院名称至少需要 2 个字符") }
+            return
+        }
+        val universityId = _uiState.value.scope.selectedUniversityId
+            ?: _uiState.value.scope.homeUniversityId
+            ?: run {
+                _uiState.update { it.copy(adminError = "未选择目标大学") }
+                return
+            }
+        submitAdminAction(
+            action = { collegeApi.create(CreateCollegeRequest(universityId = universityId, name = trimmed)) },
+            onSuccess = { college ->
+                if (_uiState.value.scope.selectedUniversityId == college.universityId) {
+                    loadedCollegesUniversityId = null
+                    loadColleges(college.universityId)
+                }
+                _messages.send("已创建学院「${college.name}」")
+            },
+        )
+    }
+
+    fun createCourse(name: String, collegeId: Long?, alias: String?, hours: Int?) {
+        val trimmedName = name.trim()
+        if (trimmedName.isEmpty()) {
+            _uiState.update { it.copy(adminError = "请输入课程名称") }
+            return
+        }
+        val state = _uiState.value
+        val request = CreateCourseRequest(
+            name = trimmedName,
+            collegeId = collegeId,
+            alias = alias?.trim()?.takeIf { it.isNotEmpty() },
+            hours = hours,
+        )
+        submitAdminAction(
+            action = {
+                if (state.isPlatformAdmin) {
+                    val targetUniversityId = state.scope.selectedUniversityId
+                        ?: state.scope.homeUniversityId
+                        ?: return@submitAdminAction Result.failure(IllegalStateException("未选择目标大学"))
+                    courseApi.createForUniversity(targetUniversityId, request)
+                } else {
+                    courseApi.create(request)
+                }
+            },
+            onSuccess = { course ->
+                coursePaginator.refresh()
+                _messages.send("已创建课程「${course.name}」")
+            },
+        )
+    }
+
+    fun confirmDeleteCourse() {
+        val state = _uiState.value
+        val course = (state.adminDialog as? HomeAdminDialog.DeleteCourse)?.course ?: return
+        submitAdminAction(
+            action = {
+                if (state.isPlatformAdmin) courseApi.deleteAny(course.id)
+                else courseApi.delete(course.id)
+            },
+            onSuccess = {
+                coursePaginator.removeItems { it.id == course.id }
+                if (activeDetailCourseId == course.id) {
+                    detailJob?.cancel()
+                    activeDetailCourseId = null
+                    _uiState.update {
+                        it.copy(
+                            selectedCourseId = null,
+                            detailState = CourseDetailUiState.Empty,
+                            files = PagedState(),
+                        )
+                    }
+                }
+                _messages.send("已删除课程「${course.name}」")
+            },
+        )
+    }
+
+    private fun <T> submitAdminAction(
+        action: suspend () -> Result<T>,
+        onSuccess: suspend (T) -> Unit,
+    ) {
+        if (_uiState.value.isAdminSubmitting) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isAdminSubmitting = true, adminError = null) }
+            action().fold(
+                onSuccess = { result ->
+                    _uiState.update { it.copy(adminDialog = null, isAdminSubmitting = false, adminError = null) }
+                    onSuccess(result)
+                },
+                onFailure = { error ->
+                    if (error is CancellationException) throw error
+                    _uiState.update { it.copy(isAdminSubmitting = false, adminError = error.userMessage) }
+                },
+            )
         }
     }
 
@@ -569,6 +722,7 @@ class HomeViewModel(
     private fun syncSession(session: SessionState) {
         val profile = session.profile
         val canSwitch = session.capabilities.platformAdmin
+        val canManageCourses = canSwitch || session.capabilities.manageOwnUniversity
         val homeId = profile?.universityId ?: _uiState.value.scope.homeUniversityId
 
         _uiState.update { state ->
@@ -581,6 +735,8 @@ class HomeViewModel(
             }
             state.copy(
                 currentUserId = profile?.id ?: state.currentUserId,
+                isPlatformAdmin = canSwitch,
+                canManageCourses = canManageCourses,
                 scope = currentScope.copy(
                     homeUniversityId = homeId,
                     canSwitchUniversity = canSwitch,

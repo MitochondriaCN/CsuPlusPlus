@@ -1,6 +1,9 @@
 package ink.qingshuige.csuplusplus.presentation.page.home
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -14,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,8 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -45,8 +49,12 @@ internal fun CourseListPane(
     activeSearchQuery: String,
     coursesState: PagedState<CourseSummary>,
     highlightedCourseId: Long?,
+    canCreateCourse: Boolean,
     onSelectUniversity: (Long) -> Unit,
     onSelectCollege: (Long?) -> Unit,
+    onCreateUniversityClick: () -> Unit,
+    onCreateCollegeClick: () -> Unit,
+    onCreateCourseClick: () -> Unit,
     onRetryUniversities: () -> Unit,
     onRetryColleges: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
@@ -57,8 +65,8 @@ internal fun CourseListPane(
     onRetry: () -> Unit,
     onCourseClick: (CourseSummary) -> Unit,
 ) {
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val listState = rememberLazyListState()
+    val isListScrolled by remember { derivedStateOf { listState.canScrollBackward } }
     val focusManager = LocalFocusManager.current
     val searchFocusRequester = remember { FocusRequester() }
     var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
@@ -88,10 +96,9 @@ internal fun CourseListPane(
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isCompactHeader = maxWidth < 460.dp
-        val badgeMaxTextWidth = if (isCompactHeader) 68.dp else 120.dp
+        val badgeMaxTextWidth = if (isCompactHeader) 140.dp else 180.dp
 
         Scaffold(
-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
                 AnimatedContent(
                     targetState = isSearchExpanded,
@@ -137,70 +144,91 @@ internal fun CourseListPane(
                                     modifier = Modifier.padding(end = 12.dp),
                                 )
                             },
-                            scrollBehavior = scrollBehavior,
                         )
                     } else {
-                        TopAppBar(
-                            title = {
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(
-                                        text = "课程列表",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(
-                                        text = subtitle,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
+                        val topAppBarColors = TopAppBarDefaults.topAppBarColors()
+                        val headerContainerColor by animateColorAsState(
+                            targetValue = if (isListScrolled) {
+                                topAppBarColors.scrolledContainerColor
+                            } else {
+                                topAppBarColors.containerColor
                             },
-                            actions = {
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            label = "CourseListHeaderColor",
+                        )
+                        Surface(color = headerContainerColor) {
+                            Column {
+                                TopAppBar(
+                                    title = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                text = "课程",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = subtitle,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    },
+                                    actions = {
+                                        if (canCreateCourse) {
+                                            IconButton(onClick = onCreateCourseClick) {
+                                                Icon(Lucide.Plus, contentDescription = "新建课程")
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                isSearchExpanded = true
+                                                requestSearchFocus = true
+                                            },
+                                        ) {
+                                            Icon(Lucide.Search, contentDescription = "搜索课程")
+                                        }
+                                        IconButton(onClick = onRefresh) {
+                                            Icon(Lucide.RefreshCw, contentDescription = "刷新课程")
+                                        }
+                                    },
+                                    colors = TopAppBarDefaults.topAppBarColors(
+                                        containerColor = Color.Transparent,
+                                        scrolledContainerColor = Color.Transparent,
+                                    ),
+                                )
                                 if (displayedUniversityName != null) {
                                     Row(
-                                        modifier = Modifier.padding(end = if (isCompactHeader) 2.dp else 4.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(if (isCompactHeader) 4.dp else 6.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         UniversitySelectorBadge(
                                             universityName = displayedUniversityName,
                                             emblem = universityEmblem,
                                             scope = scope,
-                                            compact = isCompactHeader,
+                                            compact = false,
                                             maxTextWidth = badgeMaxTextWidth,
                                             onSelectUniversity = onSelectUniversity,
+                                            onCreateUniversityClick = onCreateUniversityClick,
                                             onRetryUniversities = onRetryUniversities,
                                         )
                                         CollegeSelectorBadge(
                                             scope = scope,
-                                            compact = isCompactHeader,
+                                            compact = false,
                                             maxTextWidth = badgeMaxTextWidth,
                                             onSelectCollege = onSelectCollege,
+                                            onCreateCollegeClick = onCreateCollegeClick,
                                             onRetryColleges = onRetryColleges,
                                         )
                                     }
                                 }
-                                IconButton(
-                                    onClick = {
-                                        isSearchExpanded = true
-                                        requestSearchFocus = true
-                                    },
-                                    modifier = if (isCompactHeader) Modifier.size(40.dp) else Modifier,
-                                ) {
-                                    Icon(Lucide.Search, contentDescription = "搜索课程")
-                                }
-                                IconButton(
-                                    onClick = onRefresh,
-                                    modifier = if (isCompactHeader) Modifier.size(40.dp) else Modifier,
-                                ) {
-                                    Icon(Lucide.RefreshCw, contentDescription = "刷新课程")
-                                }
-                            },
-                            scrollBehavior = scrollBehavior,
-                        )
+                            }
+                        }
                     }
                 }
             },
@@ -289,6 +317,7 @@ private fun UniversitySelectorBadge(
     compact: Boolean,
     maxTextWidth: Dp,
     onSelectUniversity: (Long) -> Unit,
+    onCreateUniversityClick: () -> Unit,
     onRetryUniversities: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -381,6 +410,14 @@ private fun UniversitySelectorBadge(
                         }
                     }
                 }
+
+                AddScopeMenuItem(
+                    label = "新建大学",
+                    onClick = {
+                        expanded = false
+                        onCreateUniversityClick()
+                    },
+                )
             }
         }
     }
@@ -392,6 +429,7 @@ private fun CollegeSelectorBadge(
     compact: Boolean,
     maxTextWidth: Dp,
     onSelectCollege: (Long?) -> Unit,
+    onCreateCollegeClick: () -> Unit,
     onRetryColleges: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -511,9 +549,38 @@ private fun CollegeSelectorBadge(
                         }
                     }
                 }
+
+                if (scope.canSwitchUniversity) {
+                    AddScopeMenuItem(
+                        label = "新建学院",
+                        onClick = {
+                            expanded = false
+                            onCreateCollegeClick()
+                        },
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun AddScopeMenuItem(
+    label: String,
+    onClick: () -> Unit,
+) {
+    HorizontalDivider()
+    DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = {
+            Icon(
+                imageVector = Lucide.Plus,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+            )
+        },
+        onClick = onClick,
+    )
 }
 
 @Composable

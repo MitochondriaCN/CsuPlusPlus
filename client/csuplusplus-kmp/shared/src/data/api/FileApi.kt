@@ -75,4 +75,7 @@ class FileApi(private val api: ApiClient) {
 
     suspend fun deleteFile(id: Long): Result<Unit> =
         api.delete("file/$id")
+
+    suspend fun deleteAnyFile(id: Long): Result<Unit> =
+        api.delete("file/any/$id")
 }
