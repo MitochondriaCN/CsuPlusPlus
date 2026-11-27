@@ -3,6 +3,7 @@ package ink.qingshuige.csuplusplus.core.session
 import ink.qingshuige.csuplusplus.core.network.TokenProvider
 import ink.qingshuige.csuplusplus.core.network.userMessage
 import ink.qingshuige.csuplusplus.data.api.AuthApi
+import ink.qingshuige.csuplusplus.data.dto.UpdateProfileRequest
 import ink.qingshuige.csuplusplus.data.dto.UserProfileDto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -88,6 +89,10 @@ class SessionStore(
     fun seedProfile(profile: UserProfileDto) {
         _state.update { it.copy(profile = profile, errorMessage = null) }
     }
+
+    suspend fun updateNickname(nickname: String): Result<UserProfileDto> =
+        authApi.updateMyProfile(UpdateProfileRequest(nickname = nickname))
+            .onSuccess { updated -> seedProfile(updated) }
 
     suspend fun refresh(): Result<Unit> {
         if (tokenProvider.getToken() == null) {
