@@ -7,6 +7,51 @@
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" type="image/png" href="favicon.png">
     <link type="text/css" rel="stylesheet" href="styles.css">
+    <script>
+        (function () {
+            const UNMASKED_VENDOR_WEBGL = 0x9245;
+            const UNMASKED_RENDERER_WEBGL = 0x9246;
+            const VENDOR = 0x1F00;
+            const RENDERER = 0x1F01;
+            const debugExtCache = new WeakMap();
+
+            function patchGetParameter(proto) {
+                if (!proto || typeof proto.getParameter !== 'function') return;
+                const originalGetParameter = proto.getParameter;
+                proto.getParameter = function (parameter) {
+                    if (parameter === UNMASKED_VENDOR_WEBGL || parameter === UNMASKED_RENDERER_WEBGL) {
+                        let hasExt = debugExtCache.get(this);
+                        if (hasExt === undefined) {
+                            try {
+                                hasExt = !!this.getExtension('WEBGL_debug_renderer_info');
+                            } catch (_) {
+                                hasExt = false;
+                            }
+                            debugExtCache.set(this, hasExt);
+                        }
+                        if (hasExt) {
+                            const value = originalGetParameter.call(this, parameter);
+                            if (value !== null && value !== undefined) {
+                                return value;
+                            }
+                        }
+                        return originalGetParameter.call(
+                            this,
+                            parameter === UNMASKED_VENDOR_WEBGL ? VENDOR : RENDERER
+                        );
+                    }
+                    return originalGetParameter.call(this, parameter);
+                };
+            }
+
+            if (typeof WebGLRenderingContext !== 'undefined') {
+                patchGetParameter(WebGLRenderingContext.prototype);
+            }
+            if (typeof WebGL2RenderingContext !== 'undefined') {
+                patchGetParameter(WebGL2RenderingContext.prototype);
+            }
+        })();
+    </script>
 </head>
 <body style="text-align: center; align-content: center">
     <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 50 50" role="presentation">
