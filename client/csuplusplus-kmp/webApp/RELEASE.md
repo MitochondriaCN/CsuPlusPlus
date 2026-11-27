@@ -6,7 +6,10 @@
 
 ```bash
 ./kotlin build -p wasmJs -m webApp -v release
+node scripts/patch-skiko-safari.mjs
 ```
+
+> 说明：`patch-skiko-safari.mjs` 用于规避 Safari / WebKit（Bug 329421 / CMP-10986）在尾调用 Wasm 导出包装函数时损坏浮点参数导致的白屏问题。
 
 产物位于 `build/tasks/_webApp_buildWasmJsAppWasmJsRelease/`（包含 `.wasm`、`.mjs`、Skiko 运行时及 `index.html`、`styles.css`）。
 
