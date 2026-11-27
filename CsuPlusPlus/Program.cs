@@ -122,6 +122,43 @@ public class Program
         // Controllers
         builder.Services.AddControllers();
 
+        // CORS
+        var corsOrigins = builder.Configuration
+            .GetSection(CorsOptions.SectionName)
+            .Get<CorsOptions>()?
+            .AllowedOrigins ?? [];
+        if (corsOrigins.Length == 0)
+        {
+            var rawOrigins = builder.Configuration[$"{CorsOptions.SectionName}:AllowedOrigins"];
+            if (!string.IsNullOrWhiteSpace(rawOrigins))
+            {
+                corsOrigins = rawOrigins.Split([',', ';'],
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            }
+        }
+
+        corsOrigins = corsOrigins
+            .Select(origin => origin.Trim().TrimEnd('/'))
+            .Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (corsOrigins.Length > 0)
+        {
+            builder.Services.AddCors(options =>
+            {
+                options.AddDefaultPolicy(policy =>
+                {
+                    if (corsOrigins.Contains("*"))
+                        policy.AllowAnyOrigin();
+                    else
+                        policy.WithOrigins(corsOrigins);
+
+                    policy.AllowAnyHeader().AllowAnyMethod();
+                });
+            });
+        }
+
         // Rate limiting
         builder.Services.AddRateLimiter(options =>
         {
@@ -179,6 +216,9 @@ public class Program
             app.MapScalarApiReference();
 
         app.UseHttpsRedirection();
+
+        if (corsOrigins.Length > 0)
+            app.UseCors();
 
         app.UseAuthentication();
         app.UseAuthorization();
