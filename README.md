@@ -1,12 +1,50 @@
-# CsuPlusPlus
+<div align="center">
+  <img src="./client/csuplusplus-kmp/shared/composeResources/drawable/app_icon.png" alt="CSU++ Logo" width="84" height="84" />
+  <h1>CSU++ (CsuPlusPlus)</h1>
+  <p><strong>让高校学习资料更开放、平等地流动</strong></p>
+  <p>面向高校学生的课程信息与学习资料共享平台</p>
 
-基于 .NET 10、ASP.NET Core Web API 和 EF Core 的后端项目。使用 Controller → Service → DbContext 分层，通过 DTO 返回接口数据，使用邮箱密码登录和 JWT Bearer 认证。
+  <p>
+    <a href="https://github.com/MitochondriaCN/CsuPlusPlus/actions/workflows/deploy.yml">
+      <img src="https://github.com/MitochondriaCN/CsuPlusPlus/actions/workflows/deploy.yml/badge.svg" alt="Deploy main" />
+    </a>
+    <img src="https://img.shields.io/badge/.NET-11-512BD4?logo=dotnet&logoColor=white" alt=".NET 11" />
+    <img src="https://img.shields.io/badge/PostgreSQL-EF%20Core-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
+    <img src="https://img.shields.io/badge/Client-Kotlin%20Multiplatform-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin Multiplatform" />
+  </p>
+
+  <p>
+    <a href="#太长不看">太长不看</a> ·
+    <a href="#项目简介">项目简介</a> ·
+    <a href="#本地运行">本地运行</a> ·
+    <a href="#生成-postgresql-迁移">数据库迁移</a> ·
+    <a href="#发布和服务器运行">发布运行</a> ·
+    <a href="#github-actions-自动-docker-部署">Docker 部署</a>
+  </p>
+</div>
+
+---
+
+## 太长不看
+
+- **架构**：`.NET 11` + `EF Core` 后端（`Controller → Service → DbContext`，JWT 鉴权，R2 存储）+ `KMP` 客户端。开发用 SQLite，生产用 PostgreSQL 启动自动迁移。
+- **最简部署**：备好 PG 与 R2，用 `CsuPlusPlus/Dockerfile` 传入 `ConnectionStrings__DefaultConnection`、`Jwt__Secret`、`R2Storage__*` 跑 `8080`；或配好 CI Secrets 推 `main` 自动部署。
+
+## 项目简介
+
+CSU++ 是面向高校学生的课程信息与学习资料共享平台，围绕学校、学院与具体课程建立清晰的资料索引，克制简洁、开放平等地分享讲义、习题与参考内容。
+
+仓库采用 Monorepo 组织，主要包含以下部分：
+
+- **后端服务**（[CsuPlusPlus](./CsuPlusPlus)）：基于 .NET 11、ASP.NET Core Web API 和 EF Core，使用 Controller → Service → DbContext 分层，通过 DTO 返回数据，使用邮箱密码登录和 JWT Bearer 认证，并接入 Cloudflare R2（S3 兼容）对象存储。
+- **跨平台客户端**（[client/csuplusplus-kmp](./client/csuplusplus-kmp)）：基于 Kotlin Multiplatform 与 Compose Multiplatform 构建，目标平台包括 Android、Desktop（JVM）、iOS 与 Web（Kotlin/Wasm），详见 [客户端 README](./client/csuplusplus-kmp/README.md)。
 
 ## 环境要求
 
-- 开发、构建：.NET 10 SDK。
+- 开发、构建：.NET 11 SDK（仓库通过 `global.json` 固定预览版并允许预览版）。
 - 生产数据库：PostgreSQL。
-- 生成迁移：与项目 EF Core 版本一致的 `dotnet-ef` 工具，目前为 `10.0.13`。
+- 对象存储：Cloudflare R2（或兼容 S3 的对象存储，用于文件上传与下载）。
+- 生成迁移：与项目 EF Core 版本一致的 `dotnet-ef` 工具，目前为 `11.0.0-rc.2.26504.105`。
 
 以下开发命令均在仓库根目录执行。
 
@@ -17,7 +55,7 @@ dotnet restore
 dotnet run --project CsuPlusPlus --launch-profile http
 ```
 
-默认监听 `http://localhost:5253`。可访问 `/openapi/v1.json` 获取现有 OpenAPI 文档，或访问 `/openapi/v1-3.1.json` 获取 OpenAPI 3.1 文档。
+默认监听 `http://localhost:5253`。可访问 `/openapi/v1.json` 获取现有 OpenAPI 文档，或访问 `/openapi/v1-3.1.json` 获取 OpenAPI 3.1 文档；Development 环境还可使用 Scalar UI 浏览和调试文档。
 
 数据库和 JWT 配置分别从 `appsettings.json`、`appsettings.Development.json` 加载。开发连接字符串为 `Data Source=csuplusplus.db`；SQLite 文件路径相对于进程工作目录，使用上述启动方式时通常位于项目目录内。
 
@@ -32,7 +70,7 @@ dotnet run --project CsuPlusPlus --launch-profile http
 
 开发 SQLite 是可重建的开发数据库；当前仓库只维护 PostgreSQL 迁移，不要把这套迁移直接用于 SQLite。也不要对同一个数据库混用 `EnsureCreatedAsync()` 和迁移初始化。
 
-初始化只创建结构，不会自动添加大学、学院等业务数据。注册请求中的 `collegeId` 必须指向已存在的学院。
+初始化只创建结构，不会自动添加大学、学院等初始业务数据。
 
 ## 生成 PostgreSQL 迁移
 
@@ -41,13 +79,13 @@ dotnet run --project CsuPlusPlus --launch-profile http
 首次使用时安装：
 
 ```bash
-dotnet tool install --global dotnet-ef --version 10.0.13
+dotnet tool install --global dotnet-ef --version 11.0.0-rc.2.26504.105
 ```
 
 如果已经安装其他版本，可以更新到当前项目使用的版本：
 
 ```bash
-dotnet tool update --global dotnet-ef --version 10.0.13
+dotnet tool update --global dotnet-ef --version 11.0.0-rc.2.26504.105
 ```
 
 确保 .NET SDK 和全局工具目录在 `PATH` 中。升级项目 EF Core 时，同步调整工具版本。
@@ -133,6 +171,8 @@ export ASPNETCORE_URLS='http://127.0.0.1:5253'
 
 JWT 的 Issuer、Audience 和有效期已有公共配置；可以通过 `Jwt__Issuer`、`Jwt__Audience`、`Jwt__AccessTokenMinutes` 覆盖。开发配置中的密钥仅用于本地开发，生产需提供实际随机密钥。
 
+文件存储使用 `R2Storage` 配置节（默认 `PresignExpiryMinutes` 为 `15`），可通过环境变量 `R2Storage__ServiceUrl`、`R2Storage__BucketName`、`R2Storage__AccessKeyId`、`R2Storage__SecretAccessKey` 和 `R2Storage__PresignExpiryMinutes` 配置。
+
 服务器只需要发布产物和数据库连接，不需要源码、.NET SDK 或 `dotnet-ef`。自包含发布也不需要额外安装 .NET 运行时。
 
 迁移类会编译进发布程序集。程序在接受请求前调用 `MigrateAsync()`，依据 PostgreSQL 中的 `__EFMigrationsHistory` 只执行尚未应用的迁移；失败时启动终止。数据库连接账号需要有相应的建表、修改结构权限；若还需要由应用创建数据库，则需要额外的创建数据库权限。
@@ -147,7 +187,7 @@ JWT 的 Issuer、Audience 和有效期已有公共配置；可以通过 `Jwt__Is
 
 ## GitHub Actions 自动 Docker 部署
 
-`.github/workflows/deploy.yml` 仅在推送到 `main` 时触发：构建镜像 → 推送 GitHub Container Registry（GHCR）→ SSH 通知服务器拉取镜像 → 更新 `csuplusplus` 容器。SSH 只上传部署脚本，Docker 会复用服务器已有的镜像层。部署串行执行，不中断正在进行的部署；GitHub 同一并发组只保留一个等待任务，密集推送时可能跳过中间版本。
+`.github/workflows/deploy.yml` 仅在推送到 `main` 时触发（已通过 `paths-ignore` 排除 `client/**` 与 `landing/**`）：构建镜像 → 推送 GitHub Container Registry（GHCR）→ SSH 通知服务器拉取镜像 → 更新 `csuplusplus` 容器。SSH 只上传部署脚本，Docker 会复用服务器已有的镜像层。部署串行执行，不中断正在进行的部署；GitHub 同一并发组只保留一个等待任务，密集推送时可能跳过中间版本。
 
 ### 1. 初始化服务器
 
@@ -165,6 +205,10 @@ sudo chown deployuser:deployuser /opt/csuplusplus
 ```dotenv
 ConnectionStrings__DefaultConnection=Host=host.docker.internal;Port=5432;Database=csuplusplus;Username=appuser;Password=替换为实际密码
 Jwt__Secret=替换为至少32字节的随机密钥
+R2Storage__ServiceUrl=https://替换为实际AccountId.r2.cloudflarestorage.com
+R2Storage__BucketName=替换为实际Bucket名称
+R2Storage__AccessKeyId=替换为实际AccessKeyId
+R2Storage__SecretAccessKey=替换为实际SecretAccessKey
 ```
 
 这是 Docker 的 env 文件，值不加 shell 引号。创建后执行 `chmod 600 /opt/csuplusplus/app.env`。
@@ -229,17 +273,3 @@ docker logs --tail 100 csuplusplus
 ```
 
 每次镜像以 commit SHA 标记并推送到 GHCR；部署按构建输出的 digest（`sha256:…`）拉取，确保运行的就是本次构建。服务器拉取最多尝试 5 次，每次超时 180 秒（超时终止后最多额外等待 10 秒再强制结束），失败后依次等待 10、20、40、80 秒。全部失败则部署报错，旧容器继续运行。工作流总超时为 45 分钟，包含构建、推送和部署。首次拉取需要下载全部镜像层，后续仅下载缺少的层；实际速度取决于服务器到 GHCR 的网络。如果首次拉取确实需要超过 3 分钟，可调整 `scripts/deploy.sh` 中的 `pull_timeout`。上传的部署脚本执行后自动清理，旧镜像可按磁盘使用情况手动清理。
-
-## 当前接口
-
-| 方法 | 路径             | 说明                                                    |
-|------|------------------|---------------------------------------------------------|
-| POST | `/auth/register` | 邮箱、密码、昵称、学院 ID 注册，成功返回 JWT 和用户 DTO |
-| POST | `/auth/login`    | 邮箱密码登录                                            |
-| GET  | `/profile/me`    | 查询当前用户资料，需要 JWT                              |
-
-访问受保护接口时添加请求头：
-
-```http
-Authorization: Bearer <token>
-```
