@@ -5,6 +5,7 @@ import ink.qingshuige.csuplusplus.data.dto.CapabilitiesResponse
 import ink.qingshuige.csuplusplus.data.dto.LoginRequest
 import ink.qingshuige.csuplusplus.data.dto.LoginResponse
 import ink.qingshuige.csuplusplus.data.dto.RegisterRequest
+import ink.qingshuige.csuplusplus.data.dto.UpdateProfileRequest
 import ink.qingshuige.csuplusplus.data.dto.UserProfileDto
 
 /**
@@ -20,6 +21,9 @@ class AuthApi(private val api: ApiClient) {
 
     suspend fun getMyProfile(): Result<UserProfileDto> =
         api.get("profile/me")
+
+    suspend fun updateMyProfile(request: UpdateProfileRequest): Result<UserProfileDto> =
+        api.post("profile/me", body = request)
 
     suspend fun getCapabilities(): Result<CapabilitiesResponse> =
         api.get("auth/capabilities")

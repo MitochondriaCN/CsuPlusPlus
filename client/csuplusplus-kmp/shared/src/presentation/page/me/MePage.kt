@@ -2,9 +2,8 @@ package ink.qingshuige.csuplusplus.presentation.page.me
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +28,15 @@ fun MePage(viewModel: MeViewModel = koinViewModel()) {
     val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
+
+    val openExternalUrl: (String) -> Unit = { url ->
+        runCatching { uriHandler.openUri(url) }
+            .onFailure {
+                scope.launch {
+                    snackbarHostState.showSnackbar("无法在浏览器中打开链接")
+                }
+            }
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
@@ -78,11 +86,11 @@ fun MePage(viewModel: MeViewModel = koinViewModel()) {
                     MeContent(
                         profile = uiState.profile!!,
                         isCheckingUpdate = uiState.isCheckingUpdate,
+                        onEditNicknameClick = viewModel::openEditNicknameDialog,
                         onCheckUpdateClick = viewModel::checkForUpdates,
                         onLogoutClick = { showLogoutDialog = true },
-                        modifier = Modifier
-                            .widthIn(max = 600.dp)
-                            .fillMaxSize(),
+                        onGitHubClick = { openExternalUrl(GITHUB_REPO_URL) },
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
@@ -131,12 +139,7 @@ fun MePage(viewModel: MeViewModel = koinViewModel()) {
                     TextButton(
                         onClick = {
                             viewModel.dismissUpdateDialog()
-                            runCatching { uriHandler.openUri(targetUrl) }
-                                .onFailure {
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("无法在浏览器中打开链接")
-                                    }
-                                }
+                            openExternalUrl(targetUrl)
                         },
                     ) {
                         Text("前往更新")
@@ -148,6 +151,17 @@ fun MePage(viewModel: MeViewModel = koinViewModel()) {
                     Text(if (hasValidUrl) "稍后再说" else "关闭")
                 }
             },
+        )
+    }
+
+    if (uiState.showEditNicknameDialog && uiState.profile != null) {
+        EditNicknameDialog(
+            initialNickname = uiState.profile!!.nickname,
+            isUpdating = uiState.isUpdatingNickname,
+            errorMessage = uiState.editNicknameError,
+            onNicknameChange = viewModel::clearEditNicknameError,
+            onDismiss = viewModel::dismissEditNicknameDialog,
+            onConfirm = viewModel::updateNickname,
         )
     }
 
@@ -183,174 +197,308 @@ fun MePage(viewModel: MeViewModel = koinViewModel()) {
 private fun MeContent(
     profile: UserProfileDto,
     isCheckingUpdate: Boolean,
+    onEditNicknameClick: () -> Unit,
     onCheckUpdateClick: () -> Unit,
     onLogoutClick: () -> Unit,
+    onGitHubClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val platform = remember { getPlatform() }
-    val avatarInitial = remember(profile.nickname) {
-        profile.nickname.trim().firstOrNull()?.uppercaseChar()?.toString()
-    }
-
-    Column(
-        modifier = modifier
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Adaptive(minSize = 360.dp),
+        modifier = modifier,
+        contentPadding = PaddingValues(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalItemSpacing = 16.dp,
     ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(56.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (avatarInitial != null) {
-                            Text(
-                                text = avatarInitial,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Lucide.User,
-                                contentDescription = null,
-                                modifier = Modifier.size(26.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                        }
-                    }
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = profile.nickname,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = profile.email,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                ) {
-                    Text(
-                        text = "UID ${profile.id}",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                }
-            }
+        item(key = "profile") {
+            MeProfileCard(
+                profile = profile,
+                isCheckingUpdate = isCheckingUpdate,
+                onEditNicknameClick = onEditNicknameClick,
+                onCheckUpdateClick = onCheckUpdateClick,
+                onLogoutClick = onLogoutClick,
+            )
         }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Text(
-                    text = "账号信息",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-
-                ProfileInfoRow(icon = Lucide.User, label = "昵称", value = profile.nickname)
-                HorizontalDivider()
-                ProfileInfoRow(icon = Lucide.Mail, label = "邮箱", value = profile.email)
-                HorizontalDivider()
-                ProfileInfoRow(icon = Lucide.GraduationCap, label = "所属学院", value = profile.collegeName)
-                HorizontalDivider()
-                ProfileInfoRow(icon = Lucide.Info, label = "运行平台", value = platform.name)
-                HorizontalDivider()
-                ProfileInfoRow(
-                    icon = Lucide.Tag,
-                    label = "当前版本",
-                    value = "${platform.buildName} (Build ${platform.buildCode})",
-                )
-            }
+        item(key = "about") {
+            MeAboutCard(onGitHubClick = onGitHubClick)
         }
+    }
+}
 
-        FilledTonalButton(
-            onClick = onCheckUpdateClick,
-            enabled = !isCheckingUpdate,
+@Composable
+private fun MeCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp),
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun MeProfileCard(
+    profile: UserProfileDto,
+    isCheckingUpdate: Boolean,
+    onEditNicknameClick: () -> Unit,
+    onCheckUpdateClick: () -> Unit,
+    onLogoutClick: () -> Unit,
+) {
+    val platform = remember { getPlatform() }
+
+    MeCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (isCheckingUpdate) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = LocalContentColor.current,
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = profile.nickname,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("检查中...")
-            } else {
+                Text(
+                    text = profile.email,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Text(
+                    text = "UID ${profile.id}",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+
+        HorizontalDivider()
+
+        Text(
+            text = "账号信息",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+
+        ProfileInfoRow(
+            icon = Lucide.User,
+            label = "昵称",
+            value = profile.nickname,
+            trailingContent = {
+                IconButton(
+                    onClick = onEditNicknameClick,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        imageVector = Lucide.Pencil,
+                        contentDescription = "修改昵称",
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            },
+        )
+        HorizontalDivider()
+        ProfileInfoRow(icon = Lucide.Mail, label = "邮箱", value = profile.email)
+        HorizontalDivider()
+        ProfileInfoRow(icon = Lucide.GraduationCap, label = "所属大学", value = profile.universityName)
+        HorizontalDivider()
+        ProfileInfoRow(icon = Lucide.Building2, label = "所属学院", value = profile.collegeName)
+        HorizontalDivider()
+        ProfileInfoRow(icon = Lucide.Info, label = "运行平台", value = platform.name)
+        HorizontalDivider()
+        ProfileInfoRow(
+            icon = Lucide.Tag,
+            label = "当前版本",
+            value = "${platform.buildName} (Build ${platform.buildCode})",
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            FilledTonalButton(
+                onClick = onCheckUpdateClick,
+                enabled = !isCheckingUpdate,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+            ) {
+                if (isCheckingUpdate) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = LocalContentColor.current,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("检查中...")
+                } else {
+                    Icon(
+                        imageVector = Lucide.RefreshCw,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("检查更新")
+                }
+            }
+
+            OutlinedButton(
+                onClick = onLogoutClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+            ) {
                 Icon(
-                    imageVector = Lucide.RefreshCw,
+                    imageVector = Lucide.LogOut,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("检查更新")
+                Text("退出登录")
             }
         }
+    }
+}
 
-        OutlinedButton(
-            onClick = onLogoutClick,
+private const val GITHUB_REPO_URL = "https://github.com/MitochondriaCN/CsuPlusPlus"
+
+@Composable
+private fun MeAboutCard(
+    onGitHubClick: () -> Unit,
+) {
+    MeCard {
+        Text(
+            text = "关于",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+
+        Text(
+            text = "CSU++是完全公益、开源的学习资料分享平台。我们的初衷是打破大学课程学习资料分享的壁垒，做到人人可上传、可下载，同时提供各平台的高性能客户端，切实为广大学子提供方便。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        HorizontalDivider()
+
+        ProfileInfoRow(
+            icon = Lucide.Code,
+            label = "开发者",
+            value = "XianlitiCN",
+        )
+
+        FilledTonalButton(
+            onClick = onGitHubClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = MaterialTheme.colorScheme.error,
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
         ) {
             Icon(
-                imageVector = Lucide.LogOut,
+                imageVector = Lucide.Github,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("退出登录")
+            Text("GitHub")
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                imageVector = Lucide.ArrowUpRight,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
+}
+
+@Composable
+private fun EditNicknameDialog(
+    initialNickname: String,
+    isUpdating: Boolean,
+    errorMessage: String?,
+    onNicknameChange: () -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var nickname by remember(initialNickname) { mutableStateOf(initialNickname) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Lucide.Pencil, contentDescription = null) },
+        title = { Text("修改昵称") },
+        text = {
+            OutlinedTextField(
+                value = nickname,
+                onValueChange = {
+                    nickname = it
+                    onNicknameChange()
+                },
+                label = { Text("昵称") },
+                singleLine = true,
+                enabled = !isUpdating,
+                isError = errorMessage != null,
+                supportingText = {
+                    Text(errorMessage ?: "1~20 个字符")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(nickname) },
+                enabled = !isUpdating,
+            ) {
+                if (isUpdating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isUpdating,
+            ) {
+                Text("取消")
+            }
+        },
+    )
 }
 
 @Composable
@@ -358,6 +506,7 @@ private fun ProfileInfoRow(
     icon: ImageVector,
     label: String,
     value: String,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -384,5 +533,8 @@ private fun ProfileInfoRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        if (trailingContent != null) {
+            trailingContent()
+        }
     }
 }

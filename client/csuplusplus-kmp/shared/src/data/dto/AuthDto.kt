@@ -38,3 +38,8 @@ data class LoginResponse(
 data class CapabilitiesResponse(
     val capabilities: Map<String, Boolean> = emptyMap(),
 )
+
+@Serializable
+data class UpdateProfileRequest(
+    val nickname: String,
+)
